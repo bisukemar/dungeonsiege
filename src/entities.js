@@ -210,7 +210,7 @@ export class Player {
     return base + this.getSkillBonusLevel(skillKey);
   }
 
-  move(keys, paused, canvas){
+  move(keys, paused, canvas, analogInput){
     if (paused) return;
 
     let ms = this.getMoveSpeed();
@@ -219,6 +219,11 @@ export class Player {
     if (keys['s']||keys['ArrowDown']) dy += ms;
     if (keys['a']||keys['ArrowLeft']) dx -= ms;
     if (keys['d']||keys['ArrowRight']) dx += ms;
+
+    if (analogInput){
+      dx += (analogInput.x || 0) * ms;
+      dy += (analogInput.y || 0) * ms;
+    }
 
     this.x += dx;
     this.y += dy;

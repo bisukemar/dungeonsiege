@@ -68,12 +68,18 @@ function getSkillCategoryTab(key, skill){
   return 'Magic';
 }
 
-export function makeOverlay(doc, player, onClose){
+export function makeOverlay(doc, player, onClose, opts = {}){
+  const forceMobile = !!opts.forceMobile;
+  const vw = doc.defaultView ? doc.defaultView.innerWidth : 1200;
+  const isNarrow = vw < 960;
+  const isMobile = forceMobile || vw < 900;
+
   // root overlay (re-use if already exists)
-  let overlayEl = doc.getElementById('char-overlay');
+  const overlayId = isMobile ? 'char-overlay-mobile' : 'char-overlay';
+  let overlayEl = doc.getElementById(overlayId);
   if (!overlayEl){
     overlayEl = doc.createElement('div');
-    overlayEl.id = 'char-overlay';
+    overlayEl.id = overlayId;
     doc.body.appendChild(overlayEl);
   }
   overlayEl.innerHTML = '';
@@ -90,9 +96,9 @@ export function makeOverlay(doc, player, onClose){
 
   // main window
   const win = doc.createElement('div');
-  win.style.width = '960px';
-  win.style.maxWidth = '96vw';
-  win.style.maxHeight = '90vh';
+  win.style.width = isNarrow ? '96vw' : '960px';
+  win.style.maxWidth = '98vw';
+  win.style.maxHeight = isNarrow ? '92vh' : '90vh';
   win.style.display = 'flex';
   win.style.flexDirection = 'column';
   win.style.background = 'linear-gradient(180deg, #fdfdff 0%, #dfeaf9 50%, #c8dcf6 100%)';
@@ -102,6 +108,12 @@ export function makeOverlay(doc, player, onClose){
   win.style.color = '#1b2d4b';
   win.style.fontFamily = "Trebuchet MS, 'Segoe UI', system-ui,-apple-system,BlinkMacSystemFont,'Inter',Roboto,'Segoe UI',sans-serif";
   win.style.fontSize = '.8rem';
+  if (isMobile){
+    win.style.width = '100vw';
+    win.style.maxWidth = '100vw';
+    win.style.height = '92vh';
+    win.style.maxHeight = '92vh';
+  }
   overlayEl.appendChild(win);
   win.addEventListener('click', (e) => e.stopPropagation());
 
@@ -160,9 +172,39 @@ export function makeOverlay(doc, player, onClose){
   body.style.flexDirection = 'column';
   body.style.flex = '1 1 auto';
   body.style.minHeight = '0';
-  body.style.padding = '0.75rem 0.85rem 0.85rem';
+  body.style.padding = isMobile ? '0.6rem' : '0.75rem 0.85rem 0.85rem';
   body.style.gap = '.6rem';
+  body.style.overflowY = isMobile ? 'auto' : 'visible';
   win.appendChild(body);
+
+  // Mobile main tabs
+  let currentMainTab = isMobile ? 'Attributes' : 'All';
+  const mainTabs = isMobile ? ['Attributes','Skills','Item'] : ['Attributes','Skills','Shop','Item'];
+  const mainTabButtons = {};
+  let mainTabBar = null;
+  if (isMobile){
+    mainTabBar = doc.createElement('div');
+    mainTabBar.style.display = 'grid';
+    mainTabBar.style.gridTemplateColumns = 'repeat(4, 1fr)';
+    mainTabBar.style.gap = '.35rem';
+    mainTabBar.style.marginTop = '.1rem';
+    mainTabBar.style.marginBottom = '.25rem';
+    body.appendChild(mainTabBar);
+    mainTabs.forEach((tab) => {
+      const btn = doc.createElement('button');
+      btn.textContent = tab;
+      btn.style.borderRadius = '.65rem';
+      btn.style.border = '1px solid #b8cff1';
+      btn.style.padding = '.35rem .4rem';
+      btn.style.fontSize = '.78rem';
+      btn.style.cursor = 'pointer';
+      btn.style.background = 'linear-gradient(180deg, #ffffff 0%, #d7e8ff 100%)';
+      btn.style.color = '#16315c';
+      btn.onclick = () => setMainTab(tab);
+      mainTabBar.appendChild(btn);
+      mainTabButtons[tab] = btn;
+    });
+  }
 
   // ---- character info card ----
   const charCard = doc.createElement('div');
@@ -171,7 +213,7 @@ export function makeOverlay(doc, player, onClose){
   charCard.style.border = '1px solid #9ab9e8';
   charCard.style.background = 'linear-gradient(180deg, #fefefe 0%, #e6f1ff 55%, #cfe0f8 100%)';
   charCard.style.display = 'grid';
-  charCard.style.gridTemplateColumns = 'minmax(0,1.4fr) minmax(0,1.5fr) minmax(0,1.3fr)';
+  charCard.style.gridTemplateColumns = isMobile ? '1fr' : 'minmax(0,1.4fr) minmax(0,1.5fr) minmax(0,1.3fr)';
   charCard.style.gap = '.6rem';
   body.appendChild(charCard);
 
@@ -336,11 +378,51 @@ export function makeOverlay(doc, player, onClose){
   skillPointsLabel.style.opacity = '0.85';
   c3.appendChild(skillPointsLabel);
 
-  // ---------- main 3-column layout ----------
+  // extra stats panel
+  const statsBox = doc.createElement('div');
+  statsBox.style.gridColumn = isMobile ? '1 / -1' : '';
+  statsBox.style.display = 'grid';
+  statsBox.style.gridTemplateColumns = isMobile ? 'repeat(2, minmax(0,1fr))' : 'repeat(3, minmax(0,1fr))';
+  statsBox.style.gap = '.35rem .45rem';
+  statsBox.style.padding = '.45rem .6rem';
+  statsBox.style.borderRadius = '.75rem';
+  statsBox.style.border = '1px solid #b8cff1';
+  statsBox.style.background = '#ffffff';
+  statsBox.style.fontSize = '.75rem';
+  charCard.appendChild(statsBox);
+
+  const statRows = {};
+  const statDescriptors = [
+    { key:'critChance', label:'Crit Chance' },
+    { key:'critDamage', label:'Crit Damage' },
+    { key:'moveSpeed', label:'Move Speed' },
+    { key:'attackSpeed', label:'Attack Speed' },
+    { key:'defense', label:'Defense' },
+    { key:'cooldown', label:'Atk Cooldown' }
+  ];
+
+  statDescriptors.forEach(({ key, label }) => {
+    const row = doc.createElement('div');
+    row.style.display = 'flex';
+    row.style.alignItems = 'center';
+    row.style.justifyContent = 'space-between';
+    const lab = doc.createElement('span');
+    lab.textContent = label;
+    lab.style.opacity = '0.75';
+    const val = doc.createElement('span');
+    val.style.fontWeight = '600';
+    row.appendChild(lab);
+    row.appendChild(val);
+    statsBox.appendChild(row);
+    statRows[key] = val;
+  });
+
+  // ---------- main layout ----------
   const mainRow = doc.createElement('div');
-  mainRow.style.display = 'grid';
-  mainRow.style.gridTemplateColumns = 'minmax(0,1.1fr) minmax(0,1.6fr) minmax(0,1.4fr)';
-  mainRow.style.gap = '.6rem';
+  mainRow.style.display = isMobile ? 'flex' : 'grid';
+  mainRow.style.flexDirection = isMobile ? 'column' : 'row';
+  mainRow.style.gridTemplateColumns = isMobile ? '1fr' : 'minmax(0,1.1fr) minmax(0,1.6fr) minmax(0,1.4fr)';
+  mainRow.style.gap = isMobile ? '.45rem' : '.6rem';
   mainRow.style.flex = '1 1 auto';
   mainRow.style.minHeight = '0';
   body.appendChild(mainRow);
@@ -349,7 +431,8 @@ export function makeOverlay(doc, player, onClose){
   const leftCol = doc.createElement('div');
   leftCol.style.display = 'flex';
   leftCol.style.flexDirection = 'column';
-  leftCol.style.gap = '.55rem';
+  leftCol.style.gap = isMobile ? '.45rem' : '.55rem';
+  leftCol.dataset.section = 'Attributes';
   mainRow.appendChild(leftCol);
 
   // attributes card
@@ -357,7 +440,7 @@ export function makeOverlay(doc, player, onClose){
   attrCard.style.borderRadius = '.75rem';
   attrCard.style.border = '1px solid rgba(148,163,184,0.55)';
   attrCard.style.background = 'linear-gradient(180deg, #fdfdff 0%, #e4efff 55%, #cfe0f8 100%)';
-  attrCard.style.padding = '.55rem .65rem';
+  attrCard.style.padding = isMobile ? '.5rem .55rem' : '.55rem .65rem';
   attrCard.style.display = 'flex';
   attrCard.style.flexDirection = 'column';
   attrCard.style.gap = '.35rem';
@@ -525,7 +608,8 @@ export function makeOverlay(doc, player, onClose){
   const midCol = doc.createElement('div');
   midCol.style.display = 'flex';
   midCol.style.flexDirection = 'column';
-  midCol.style.gap = '.55rem';
+  midCol.style.gap = isMobile ? '.45rem' : '.55rem';
+  midCol.dataset.section = 'Skills';
   mainRow.appendChild(midCol);
 
   const skillsCard = doc.createElement('div');
@@ -600,7 +684,8 @@ export function makeOverlay(doc, player, onClose){
   skillList.style.marginTop = '.25rem';
   skillList.style.fontSize = '.78rem';
   skillList.style.minHeight = '0';
-  skillList.style.maxHeight = '320px';
+  const listMaxHeight = isMobile ? '52vh' : '320px';
+  skillList.style.maxHeight = listMaxHeight;
   skillList.style.overflowY = 'auto';
   skillsCard.appendChild(skillList);
 
@@ -608,8 +693,29 @@ export function makeOverlay(doc, player, onClose){
   const rightCol = doc.createElement('div');
   rightCol.style.display = 'flex';
   rightCol.style.flexDirection = 'column';
-  rightCol.style.gap = '.55rem';
+  rightCol.style.gap = isMobile ? '.45rem' : '.55rem';
+  rightCol.dataset.section = 'Item';
   mainRow.appendChild(rightCol);
+
+  function setMainTab(tab){
+    currentMainTab = tab;
+    if (!isMobile) return;
+    if (mainTabBar){
+      Object.entries(mainTabButtons).forEach(([key, btn]) => {
+        const active = key === tab;
+        btn.style.background = active ? '#1f2937' : 'linear-gradient(180deg, #ffffff 0%, #d7e8ff 100%)';
+        btn.style.color = active ? '#fefefe' : '#16315c';
+        btn.style.boxShadow = active ? '0 0 0 1px #9ab9e8 inset, 0 6px 10px rgba(21,44,90,0.25)' : 'none';
+      });
+    }
+    const showAttr = tab === 'Attributes';
+    const showSkills = tab === 'Skills';
+    const showItem = tab === 'Item';
+    leftCol.style.display = showAttr ? 'flex' : 'none';
+    midCol.style.display = showSkills ? 'flex' : 'none';
+    rightCol.style.display = showItem ? 'flex' : 'none';
+    if (showItem && currentRightMode === 'Shop') setRightMode('Inventory');
+  }
 
   const modeCard = doc.createElement('div');
   modeCard.style.borderRadius = '.75rem';
@@ -622,7 +728,7 @@ export function makeOverlay(doc, player, onClose){
   rightCol.appendChild(modeCard);
 
   const modeLabel = doc.createElement('div');
-  modeLabel.textContent = 'Item Panel:';
+  modeLabel.textContent = 'Item Tabs:';
   modeLabel.style.fontSize = '.75rem';
   modeLabel.style.opacity = '0.8';
   modeCard.appendChild(modeLabel);
@@ -632,7 +738,7 @@ export function makeOverlay(doc, player, onClose){
   modeTabs.style.gap = '.35rem';
   modeCard.appendChild(modeTabs);
 
-  const rightModes = ['Shop','Inventory'];
+  const rightModes = isMobile ? ['Inventory','Equipped','Shop'] : ['Inventory','Shop'];
   const rightModeButtons = {};
   let currentRightMode = 'Inventory';
 
@@ -736,7 +842,8 @@ export function makeOverlay(doc, player, onClose){
   shopList.style.flexDirection = 'column';
   shopList.style.gap = '.25rem';
   shopList.style.minHeight = '0';
-  shopList.style.maxHeight = '320px';
+  shopList.style.flex = '1 1 auto';
+  shopList.style.maxHeight = isMobile ? '48vh' : '400px';
   shopList.style.overflowY = 'auto';
 
   const invList = doc.createElement('div');
@@ -744,7 +851,8 @@ export function makeOverlay(doc, player, onClose){
   invList.style.flexDirection = 'column';
   invList.style.gap = '.25rem';
   invList.style.minHeight = '0';
-  invList.style.maxHeight = '320px';
+  invList.style.flex = '1 1 auto';
+  invList.style.maxHeight = isMobile ? '48vh' : '400px';
   invList.style.overflowY = 'auto';
 
   function renderShopBuy(){
@@ -1055,6 +1163,37 @@ export function makeOverlay(doc, player, onClose){
       shopList.style.display = 'flex';
       invList.style.display = 'none';
       if (shopMode === 'buy') renderShopBuy(); else renderShopSell();
+    } else if (currentRightMode === 'Equipped'){
+      const eqBox = doc.createElement('div');
+      eqBox.style.display = 'flex';
+      eqBox.style.flexDirection = 'column';
+      eqBox.style.gap = '.25rem';
+      eqBox.style.fontSize = '.78rem';
+      const slots = ['weapon','shield','armor','garment','shoes','head','accL','accR'];
+      slots.forEach((slotKey) => {
+        const row = doc.createElement('div');
+        row.style.display = 'flex';
+        row.style.alignItems = 'center';
+        row.style.justifyContent = 'space-between';
+        row.style.padding = '.32rem .4rem';
+        row.style.borderRadius = '.55rem';
+        row.style.background = 'rgba(255,255,255,0.92)';
+        row.style.border = '1px solid #b8cff1';
+        const label = doc.createElement('span');
+        label.textContent = SLOT_LABEL[slotKey] || slotKey;
+        label.style.fontSize = '.74rem';
+        label.style.opacity = '0.9';
+        row.appendChild(label);
+        const name = doc.createElement('span');
+        const it = player.equip?.[slotKey];
+        name.textContent = it ? it.name : 'Empty';
+        name.style.fontWeight = '600';
+        name.style.fontSize = '.78rem';
+        name.style.opacity = it ? '0.95' : '0.6';
+        row.appendChild(name);
+        eqBox.appendChild(row);
+      });
+      rightPanel.appendChild(eqBox);
     } else {
       rightPanel.appendChild(invList);
       shopList.style.display = 'none';
@@ -1284,15 +1423,13 @@ export function makeOverlay(doc, player, onClose){
     const lvl = player.level || 1;
     const exp = player.exp || 0;
     const getReq = player.getExpToLevelRequirement ? player.getExpToLevelRequirement.bind(player) : null;
-    const nextReq = getReq ? getReq(lvl) : 100;
-    const prevReq = getReq ? getReq(lvl - 1) : 0;
-    const span = nextReq - prevReq;
-    const current = exp - prevReq;
+    const span = player.expToLevel != null ? player.expToLevel : (getReq ? getReq(lvl) : 100);
+    const current = Math.max(0, exp);
     const expPct = span > 0 ? Math.max(0, Math.min(1, current / span)) : 0;
 
     expBarInner.style.width = (expPct * 100) + '%';
     lvlValue.textContent = `Lv ${lvl}`;
-    expText.textContent = `${current}/${span} EXP to next level`;
+    expText.textContent = `${Math.floor(current)}/${span} EXP to next level`;
 
     const sp = player.statPoints || 0;
     const kp = player.skillPoints || 0;
@@ -1300,6 +1437,21 @@ export function makeOverlay(doc, player, onClose){
     attrPointsLabel.textContent = `Stat Points: ${sp}`;
     statPointsLabel.textContent = `Unspent Stat Points: ${sp}`;
     skillPointsLabel.textContent = `Unspent Skill Points: ${kp}`;
+
+    // derived stats
+    const cc = typeof player.getCritChance === 'function' ? player.getCritChance() : 0;
+    const cd = typeof player.getCritDamage === 'function' ? player.getCritDamage() : 1.5;
+    const ms = typeof player.getMoveSpeed === 'function' ? player.getMoveSpeed() : 0;
+    const atkCd = typeof player.getAttackCooldown === 'function' ? player.getAttackCooldown() : 0;
+    const atkSpd = atkCd > 0 ? (60 / atkCd) : 0;
+    const defense = player.defense || 0;
+
+    if (statRows.critChance) statRows.critChance.textContent = `${Math.round(cc * 100)}%`;
+    if (statRows.critDamage) statRows.critDamage.textContent = `${Math.round(cd * 100) / 100}x`;
+    if (statRows.moveSpeed) statRows.moveSpeed.textContent = `${ms.toFixed(2)} u/f`;
+    if (statRows.attackSpeed) statRows.attackSpeed.textContent = `${atkSpd.toFixed(2)} /s`;
+    if (statRows.cooldown) statRows.cooldown.textContent = `${atkCd.toFixed(0)} f`;
+    if (statRows.defense) statRows.defense.textContent = `${defense}`;
 
     // attributes
     if (!player.stats) player.stats = { str:0, agi:0, vit:0, int:0, dex:0, luck:0 };
@@ -1336,8 +1488,19 @@ export function makeOverlay(doc, player, onClose){
 
   function open(tab){
     overlayEl.style.display = 'grid';
-    if (tab === 'Shop') setRightMode('Shop');
-    else if (tab === 'Inv') setRightMode('Inventory');
+    if (isMobile){
+      if (tab === 'Inv' || tab === 'Shop') {
+        setMainTab('Item');
+        if (tab === 'Shop') setRightMode('Shop');
+      } else if (tab === 'Skills') {
+        setMainTab('Skills');
+      } else {
+        setMainTab('Attributes');
+      }
+    } else {
+      if (tab === 'Shop') setRightMode('Shop');
+      else if (tab === 'Inv') setRightMode('Inventory');
+    }
     updateAll();
   }
 
@@ -1350,6 +1513,7 @@ export function makeOverlay(doc, player, onClose){
   setRightMode('Inventory');
   setShopMode('buy');
   setSkillTab('All');
+  if (isMobile) setMainTab(currentMainTab);
 
   return {
     open,

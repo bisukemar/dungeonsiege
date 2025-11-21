@@ -30,8 +30,6 @@ const pausedText = document.getElementById('pausedText');
 
 const topBar = document.getElementById('topBar');
 const statsBtn = document.getElementById('statsBtn');
-const shopBtn = document.getElementById('shopBtn');
-const invBtn = document.getElementById('invBtn');
 const adminBtn = document.getElementById('adminBtn');
 
 // Title + options
@@ -41,6 +39,7 @@ const titleOptionsBtn = document.getElementById('titleOptionsBtn');
 const optionsModal = document.getElementById('optionsModal');
 const optionsCloseBtn = document.getElementById('optionsCloseBtn');
 const adminToggle = document.getElementById('adminToggle');
+const joystick = createMobileJoystick(canvas);
 
 // ========= CANVAS / CAMERA =========
 function resize() {
@@ -114,6 +113,135 @@ function getEffectiveSkillLevel(key) {
     return player.getEffectiveSkillLevel(key);
   }
   return (player.skillLevel && player.skillLevel[key]) || 0;
+}
+
+function createMobileJoystick(canvasEl) {
+  const state = {
+    active: false,
+    dirX: 0,
+    dirY: 0,
+    id: null,
+    startX: 0,
+    startY: 0
+  };
+
+  const root = document.createElement('div');
+  root.style.position = 'fixed';
+  root.style.width = '160px';
+  root.style.height = '160px';
+  root.style.transform = 'translate(-50%, -50%)';
+  root.style.left = '80px';
+  root.style.top = '80px';
+  root.style.pointerEvents = 'none';
+  root.style.opacity = '0.92';
+  root.style.zIndex = '80';
+  root.style.display = 'none';
+
+  const base = document.createElement('div');
+  base.style.position = 'absolute';
+  base.style.left = '0';
+  base.style.top = '0';
+  base.style.width = '160px';
+  base.style.height = '160px';
+  base.style.borderRadius = '50%';
+  base.style.border = '2px solid rgba(23, 37, 84, 0.45)';
+  base.style.background = 'radial-gradient(circle, rgba(255,255,255,0.6), rgba(180,205,244,0.35))';
+  root.appendChild(base);
+
+  const thumb = document.createElement('div');
+  thumb.style.position = 'absolute';
+  thumb.style.left = '50%';
+  thumb.style.top = '50%';
+  thumb.style.width = '70px';
+  thumb.style.height = '70px';
+  thumb.style.borderRadius = '50%';
+  thumb.style.transform = 'translate(-50%, -50%)';
+  thumb.style.background = 'linear-gradient(180deg, #fffefb 0%, #d7e8ff 100%)';
+  thumb.style.boxShadow = '0 6px 14px rgba(21,44,90,0.28)';
+  thumb.style.border = '1px solid rgba(23,37,84,0.25)';
+  root.appendChild(thumb);
+
+  function hide() {
+    state.active = false;
+    state.dirX = 0;
+    state.dirY = 0;
+    state.id = null;
+    root.style.display = 'none';
+    thumb.style.transform = 'translate(-50%, -50%)';
+  }
+
+  function updateThumb(touchX, touchY) {
+    const dx = touchX - state.startX;
+    const dy = touchY - state.startY;
+    const maxR = 55;
+    const dist = Math.hypot(dx, dy);
+    const clamped = dist > maxR ? maxR : dist;
+    const angle = Math.atan2(dy, dx) || 0;
+    const offsetX = Math.cos(angle) * clamped;
+    const offsetY = Math.sin(angle) * clamped;
+    thumb.style.transform = `translate(calc(-50% + ${offsetX}px), calc(-50% + ${offsetY}px))`;
+    if (clamped < 6) {
+      state.dirX = 0;
+      state.dirY = 0;
+    } else {
+      state.dirX = offsetX / maxR;
+      state.dirY = offsetY / maxR;
+    }
+  }
+
+  function handleStart(e) {
+    if (state.active) return;
+    if (overlayOpen) return;
+    const target = e.target;
+    if (
+      target &&
+      target.closest &&
+      target.closest('button, input, select, textarea, label, #overlay, #titleScreen, #topBar, #optionsModal')
+    ) {
+      return;
+    }
+    if (canvasEl && target && !canvasEl.contains(target) && target !== document.body) {
+      return;
+    }
+    const touch = e.changedTouches[0];
+    state.id = touch.identifier;
+    state.startX = touch.clientX;
+    state.startY = touch.clientY;
+    root.style.left = `${touch.clientX}px`;
+    root.style.top = `${touch.clientY}px`;
+    root.style.display = 'block';
+    state.active = true;
+    updateThumb(touch.clientX, touch.clientY);
+    e.preventDefault();
+  }
+
+  function handleMove(e) {
+    if (!state.active) return;
+    for (const t of e.changedTouches) {
+      if (t.identifier === state.id) {
+        updateThumb(t.clientX, t.clientY);
+        break;
+      }
+    }
+  }
+
+  function handleEnd(e) {
+    if (!state.active) return;
+    for (const t of e.changedTouches) {
+      if (t.identifier === state.id) {
+        hide();
+        break;
+      }
+    }
+  }
+
+  window.addEventListener('touchstart', handleStart, { passive: false });
+  window.addEventListener('touchmove', handleMove, { passive: false });
+  window.addEventListener('touchend', handleEnd, { passive: false });
+  window.addEventListener('touchcancel', handleEnd, { passive: false });
+
+  document.body.appendChild(root);
+  return state;
 }
 
 // Facing direction for some skills
@@ -306,18 +434,11 @@ function handleOverlayClosed() {
 
 
 
-const overlay = makeOverlay(document, player, handleOverlayClosed);
+const useMobileOverlay = window.innerWidth < 960;
+const overlay = makeOverlay(document, player, handleOverlayClosed, { forceMobile: useMobileOverlay });
 
 statsBtn.onclick = () => {
   if (!gameOver && gameLoopStarted) openOverlay('Stats');
-};
-if (invBtn) {
-  invBtn.onclick = () => {
-    if (!gameOver && gameLoopStarted) openOverlay('Inv');
-  };
-}
-shopBtn.onclick = () => {
-  if (!gameOver && gameLoopStarted) openShopWithChoice();
 };
 
 function openOverlay(tab) {
@@ -717,6 +838,11 @@ function loop() {
     if (keys['a'] || keys['ArrowLeft']) dX -= 1;
     if (keys['d'] || keys['ArrowRight']) dX += 1;
 
+    const joyX = joystick && joystick.active ? joystick.dirX : 0;
+    const joyY = joystick && joystick.active ? joystick.dirY : 0;
+    dX += joyX;
+    dY += joyY;
+
     if (dX !== 0 || dY !== 0) {
       const len = Math.hypot(dX, dY) || 1;
       facingX = dX / len;
@@ -729,7 +855,9 @@ function loop() {
     // ----- PLAYER MOVEMENT (with obstacle collision) -----
   const prevPx = player.x;
   const prevPy = player.y;
-  player.move(keys, paused, canvas);
+  const analogInput =
+    joystick && joystick.active ? { x: joystick.dirX, y: joystick.dirY } : null;
+  player.move(keys, paused, canvas, analogInput);
 
   // collide player with obstacles: if new position intersects, revert
   obstacles.forEach((o) => {
