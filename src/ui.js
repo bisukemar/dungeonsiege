@@ -498,14 +498,14 @@ export function makeOverlay(doc, player, onClose, opts = {}){
 
     const btn = doc.createElement('button');
     btn.textContent = '+';
-    btn.style.width = '20px';
-    btn.style.height = '20px';
+    btn.style.width = isMobile ? '28px' : '20px';
+    btn.style.height = isMobile ? '28px' : '20px';
     btn.style.borderRadius = '999px';
     btn.style.border = '1px solid rgba(209,213,219,0.9)';
     btn.style.background = 'linear-gradient(180deg, #fefefe 0%, #dbe9fb 100%)';
     btn.style.color = '#1b2d4b';
     btn.style.cursor = 'pointer';
-    btn.style.fontSize = '.8rem';
+    btn.style.fontSize = isMobile ? '.95rem' : '.8rem';
     btn.onclick = () => {
       if (player.statPoints > 0 && player.stats[key] < 99){
         player.stats[key]++;
@@ -1347,8 +1347,8 @@ export function makeOverlay(doc, player, onClose, opts = {}){
 
       const addBtn = doc.createElement('button');
       addBtn.textContent = '+';
-      addBtn.style.fontSize = '.75rem';
-      addBtn.style.padding = '.18rem .45rem';
+      addBtn.style.fontSize = isMobile ? '.95rem' : '.75rem';
+      addBtn.style.padding = isMobile ? '.3rem .6rem' : '.18rem .45rem';
       addBtn.style.borderRadius = '.35rem';
       addBtn.style.border = '1px solid rgba(255,255,255,0.25)';
       addBtn.style.background = 'linear-gradient(180deg, #fefefe 0%, #dbe9fb 100%)';
