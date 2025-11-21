@@ -36,15 +36,18 @@
 
     #ui {
       position: absolute;
-      top: 10px;
-      left: 10px;
+      top: calc(10px + env(safe-area-inset-top, 0px));
+      left: calc(10px + env(safe-area-inset-left, 0px));
+      padding: 6px 8px;
+      border-radius: 8px;
+      background: rgba(13, 31, 64, 0.3);
       font-family: "Andale Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
       white-space: pre;
       user-select: none;
-      font-size: 0.8rem;
+      font-size: 0.9rem;
       color: #fdfdfd;
       text-shadow: 0 0 10px rgba(0, 0, 0, 0.65);
-      z-index: 20;
+      z-index: 80;
     }
 
     #msg {
@@ -89,20 +92,24 @@
     /* Top control bar (hidden until game actually starts) */
     #topBar {
       position: absolute;
-      top: 10px;
-      right: 10px;
+      top: calc(10px + env(safe-area-inset-top, 0px));
+      right: calc(10px + env(safe-area-inset-right, 0px));
       display: none; /* shown from main.js after setup */
       gap: 0.5rem;
-      z-index: 25;
+      z-index: 90;
+      background: rgba(255, 255, 255, 0.35);
+      border-radius: 999px;
+      padding: 4px 6px;
+      backdrop-filter: blur(8px);
     }
 
     #topBar button {
-      padding: 0.35rem 0.8rem;
-      border-radius: 8px;
+      padding: 0.4rem 0.9rem;
+      border-radius: 10px;
       border: 1px solid var(--ro-panel-edge);
       background: linear-gradient(180deg, #f6fbff 0%, #cfe3fa 100%);
       color: var(--ro-ink-strong);
-      font-size: 0.8rem;
+      font-size: 0.86rem;
       cursor: pointer;
       box-shadow: 0 3px 12px rgba(13, 31, 64, 0.2);
     }
@@ -121,6 +128,17 @@
     #topBar button#adminBtn:hover {
       background: linear-gradient(180deg, #fff9e8 0%, #f2dfaf 100%);
       border-color: #f2cf8a;
+    }
+
+    @media (max-width: 960px) {
+      #ui {
+        font-size: 1rem;
+        padding: 8px 10px;
+      }
+      #topBar button {
+        font-size: 1rem;
+        padding: 0.45rem 1rem;
+      }
     }
 
     /* Overlay container (panel content is built by ui.js) */
