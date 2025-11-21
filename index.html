@@ -38,9 +38,9 @@
       position: fixed;
       top: calc(10px + env(safe-area-inset-top, 0px));
       left: calc(10px + env(safe-area-inset-left, 0px));
-      padding: 6px 8px;
+      padding: 4px 6px;
       border-radius: 8px;
-      background: rgba(13, 31, 64, 0.3);
+      background: transparent;
       font-family: "Andale Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
       white-space: pre;
       user-select: none;
@@ -98,17 +98,13 @@
       display: none; /* shown from main.js after setup */
       gap: 0.5rem;
       z-index: 130;
-      background: rgba(255, 255, 255, 0.35);
-      border-radius: 999px;
-      padding: 4px 6px;
-      backdrop-filter: blur(8px);
     }
 
     #topBar button {
-      padding: 0.4rem 0.9rem;
+      padding: 0.35rem 0.85rem;
       border-radius: 10px;
       border: 1px solid var(--ro-panel-edge);
-      background: linear-gradient(180deg, #f6fbff 0%, #cfe3fa 100%);
+      background: rgba(255,255,255,0.85);
       color: var(--ro-ink-strong);
       font-size: 0.86rem;
       cursor: pointer;
@@ -133,14 +129,14 @@
 
     @media (max-width: 960px) {
       #ui {
-        font-size: 1rem;
-        padding: 8px 10px;
+        font-size: 0.75rem;
+        padding: 6px 8px;
         left: calc(8px + env(safe-area-inset-left, 0px));
         top: calc(8px + env(safe-area-inset-top, 0px));
       }
       #topBar button {
-        font-size: 1rem;
-        padding: 0.45rem 1rem;
+        font-size: 0.95rem;
+        padding: 0.4rem 0.9rem;
       }
     }
 
