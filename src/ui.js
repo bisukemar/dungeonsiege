@@ -1247,12 +1247,11 @@ export function makeOverlay(doc, player, onClose, opts = {}){
         typeof player.getSkillBonusLevel === 'function'
           ? player.getSkillBonusLevel(key)
           : 0;
-      const effectiveLevel = baseLevel + bonusLevel;
       const maxLv = skill.maxLevel || 5;
 
       const lvlEl = doc.createElement('span');
       const bonusTxt = bonusLevel > 0 ? ` (+${bonusLevel})` : '';
-      lvlEl.textContent = `Lv ${effectiveLevel}/${maxLv}${bonusTxt}`;
+      lvlEl.textContent = `Lv ${baseLevel}${bonusTxt}/${maxLv}`;
       lvlEl.style.fontSize = '.75rem';
       lvlEl.style.opacity = '.85';
       top.appendChild(lvlEl);
