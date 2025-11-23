@@ -380,9 +380,11 @@ export function makeOverlay(doc, player, onClose, opts = {}){
 
   // extra stats panel
   const statsBox = doc.createElement('div');
-  statsBox.style.gridColumn = isMobile ? '1 / -1' : '';
+  statsBox.style.gridColumn = '1 / -1';
   statsBox.style.display = 'grid';
-  statsBox.style.gridTemplateColumns = isMobile ? 'repeat(2, minmax(0,1fr))' : 'repeat(3, minmax(0,1fr))';
+  statsBox.style.gridTemplateColumns = isMobile
+    ? 'repeat(2, minmax(0,1fr))'
+    : 'repeat(auto-fit, minmax(160px, 1fr))';
   statsBox.style.gap = '.35rem .45rem';
   statsBox.style.padding = '.45rem .6rem';
   statsBox.style.borderRadius = '.75rem';
@@ -397,20 +399,26 @@ export function makeOverlay(doc, player, onClose, opts = {}){
     { key:'critDamage', label:'Crit Damage' },
     { key:'moveSpeed', label:'Move Speed' },
     { key:'attackSpeed', label:'Attack Speed' },
-    { key:'defense', label:'Defense' },
-    { key:'cooldown', label:'Atk Cooldown' }
+    { key:'pickupRadius', label:'Pickup Radius' },
+    { key:'defense', label:'Defense' }
   ];
 
   statDescriptors.forEach(({ key, label }) => {
     const row = doc.createElement('div');
     row.style.display = 'flex';
-    row.style.alignItems = 'center';
-    row.style.justifyContent = 'space-between';
-    const lab = doc.createElement('span');
+    row.style.flexDirection = 'column';
+    row.style.gap = '.1rem';
+    row.style.padding = '.4rem .45rem';
+    row.style.borderRadius = '.65rem';
+    row.style.border = '1px solid rgba(148,163,184,0.55)';
+    row.style.background = 'linear-gradient(180deg, rgba(238,245,255,0.95) 0%, #f8fbff 60%, #e8f2ff 100%)';
+    const lab = doc.createElement('div');
     lab.textContent = label;
-    lab.style.opacity = '0.75';
-    const val = doc.createElement('span');
-    val.style.fontWeight = '600';
+    lab.style.opacity = '0.7';
+    lab.style.fontSize = '.72rem';
+    const val = doc.createElement('div');
+    val.style.fontWeight = '700';
+    val.style.fontSize = '.9rem';
     row.appendChild(lab);
     row.appendChild(val);
     statsBox.appendChild(row);
@@ -444,6 +452,7 @@ export function makeOverlay(doc, player, onClose, opts = {}){
   attrCard.style.display = 'flex';
   attrCard.style.flexDirection = 'column';
   attrCard.style.gap = '.35rem';
+  attrCard.style.position = 'relative';
   leftCol.appendChild(attrCard);
 
   const attrHeader = doc.createElement('div');
@@ -469,7 +478,99 @@ export function makeOverlay(doc, player, onClose, opts = {}){
   attrList.style.gap = '.2rem';
   attrCard.appendChild(attrList);
 
+  const attrDescriptions = {
+    str: 'Boosts physical damage: Arrow gains +2 per STR, Bash gains +2.2 per STR, and Magnum Break gains +1.8 per STR.',
+    agi: 'Increases move speed (+0.04 per AGI, capped) and speeds up attacks: -1 frame from basic attack cooldown (min 4) and -1 frame from each skill cooldown on cast (min 10).',
+    vit: 'Raises max HP by 20 per VIT (also benefits from gear that adds VIT or max HP).',
+    int: 'Boosts magic damage: Fireball gains +2 per INT, Ice Wave +1.6 per INT, and Meteor Storm +3 per INT.',
+    dex: 'Extends attack reach and adds minor damage: Fireball/Arrow travel farther, Ice/Bash/Magnum grow larger (about +4% size per DEX), Arrow gains +0.5 per DEX, and Magnum Break gains +0.3 per DEX.',
+    luck: 'Raises crit chance by +0.5% per LUK (base 5%, cap 80%) and expands coin pickup radius toward full-screen range at high LUK.'
+  };
+
+  const attrTooltip = doc.createElement('div');
+  attrTooltip.style.position = 'absolute';
+  attrTooltip.style.minWidth = '240px';
+  attrTooltip.style.maxWidth = '320px';
+  attrTooltip.style.display = 'none';
+  attrTooltip.style.flexDirection = 'column';
+  attrTooltip.style.gap = '.25rem';
+  attrTooltip.style.padding = '.55rem .65rem';
+  attrTooltip.style.borderRadius = '.6rem';
+  attrTooltip.style.border = '1px solid #7da8d9';
+  attrTooltip.style.background = '#0f1f3b';
+  attrTooltip.style.color = '#f2f6ff';
+  attrTooltip.style.boxShadow = '0 10px 35px rgba(12,28,74,0.35)';
+  attrTooltip.style.zIndex = '4';
+  attrTooltip.style.pointerEvents = 'auto';
+  attrTooltip.style.transition = 'opacity 120ms ease';
+  attrTooltip.style.opacity = '0';
+  attrTooltip.addEventListener('click', (e) => e.stopPropagation());
+  if (!isMobile){
+    attrTooltip.addEventListener('mouseleave', hideAttrTooltip);
+  }
+  attrCard.appendChild(attrTooltip);
+
+  const attrTooltipHeader = doc.createElement('div');
+  attrTooltipHeader.style.display = 'flex';
+  attrTooltipHeader.style.alignItems = 'center';
+  attrTooltipHeader.style.justifyContent = 'space-between';
+  attrTooltip.appendChild(attrTooltipHeader);
+
+  const attrTooltipTitle = doc.createElement('div');
+  attrTooltipTitle.style.fontWeight = '700';
+  attrTooltipTitle.style.fontSize = '.85rem';
+  attrTooltipHeader.appendChild(attrTooltipTitle);
+
+  const attrTooltipClose = doc.createElement('button');
+  attrTooltipClose.textContent = '✕';
+  attrTooltipClose.style.display = isMobile ? 'inline-flex' : 'none';
+  attrTooltipClose.style.alignItems = 'center';
+  attrTooltipClose.style.justifyContent = 'center';
+  attrTooltipClose.style.width = '26px';
+  attrTooltipClose.style.height = '26px';
+  attrTooltipClose.style.borderRadius = '999px';
+  attrTooltipClose.style.border = '1px solid rgba(255,255,255,0.35)';
+  attrTooltipClose.style.background = 'rgba(255,255,255,0.08)';
+  attrTooltipClose.style.color = '#f2f6ff';
+  attrTooltipClose.style.cursor = 'pointer';
+  attrTooltipClose.style.fontSize = '.8rem';
+  attrTooltipClose.onclick = hideAttrTooltip;
+  attrTooltipHeader.appendChild(attrTooltipClose);
+
+  const attrTooltipText = doc.createElement('div');
+  attrTooltipText.style.fontSize = '.78rem';
+  attrTooltipText.style.lineHeight = '1.35';
+  attrTooltipText.style.opacity = '0.95';
+  attrTooltip.appendChild(attrTooltipText);
+
   const attrControls = {};
+
+  function hideAttrTooltip(){
+    attrTooltip.style.display = 'none';
+    attrTooltip.style.opacity = '0';
+    attrTooltip.dataset.key = '';
+  }
+
+  function showAttrTooltip(key, anchorEl, labelText){
+    const desc = attrDescriptions[key];
+    if (!desc) return;
+    attrTooltipTitle.textContent = labelText || key.toUpperCase();
+    attrTooltipText.textContent = desc;
+    attrTooltip.dataset.key = key;
+    attrTooltip.style.display = 'flex';
+    attrTooltip.style.opacity = '1';
+
+    const cardRect = attrCard.getBoundingClientRect();
+    const labelRect = anchorEl.getBoundingClientRect();
+    const desiredLeft = labelRect.left - cardRect.left;
+    const desiredTop = labelRect.top - cardRect.top - attrTooltip.offsetHeight - 8;
+    const maxLeft = Math.max(6, attrCard.clientWidth - attrTooltip.offsetWidth - 6);
+    const finalLeft = Math.min(Math.max(6, desiredLeft), maxLeft);
+    const finalTop = Math.max(6, desiredTop);
+
+    attrTooltip.style.left = `${finalLeft}px`;
+    attrTooltip.style.top = `${finalTop}px`;
+  }
 
   function makeAttrRow(labelText, key){
     const row = doc.createElement('div');
@@ -483,6 +584,15 @@ export function makeOverlay(doc, player, onClose, opts = {}){
     label.textContent = labelText;
     label.style.fontSize = '.76rem';
     label.style.opacity = '0.86';
+    label.style.cursor = 'help';
+    if (isMobile){
+      label.addEventListener('click', (e) => {
+        e.stopPropagation();
+        showAttrTooltip(key, label, labelText);
+      });
+    } else {
+      label.addEventListener('mouseenter', () => showAttrTooltip(key, label, labelText));
+    }
     row.appendChild(label);
 
     const right = doc.createElement('div');
@@ -1443,13 +1553,20 @@ export function makeOverlay(doc, player, onClose, opts = {}){
     const ms = typeof player.getMoveSpeed === 'function' ? player.getMoveSpeed() : 0;
     const atkCd = typeof player.getAttackCooldown === 'function' ? player.getAttackCooldown() : 0;
     const atkSpd = atkCd > 0 ? (60 / atkCd) : 0;
+    const luck = (player.stats && player.stats.luck) || 0;
+    const vw = doc.defaultView ? doc.defaultView.innerWidth : 800;
+    const vh = doc.defaultView ? doc.defaultView.innerHeight : 600;
+    const screenRadius = Math.hypot(vw, vh) / 2;
+    const basePickup = (player.r || 0) + 10;
+    const extraPerLuck = screenRadius / 99;
+    const pickupRadius = Math.min(screenRadius, basePickup + luck * extraPerLuck);
     const defense = player.defense || 0;
 
     if (statRows.critChance) statRows.critChance.textContent = `${Math.round(cc * 100)}%`;
     if (statRows.critDamage) statRows.critDamage.textContent = `${Math.round(cd * 100) / 100}x`;
     if (statRows.moveSpeed) statRows.moveSpeed.textContent = `${ms.toFixed(2)} u/f`;
     if (statRows.attackSpeed) statRows.attackSpeed.textContent = `${atkSpd.toFixed(2)} /s`;
-    if (statRows.cooldown) statRows.cooldown.textContent = `${atkCd.toFixed(0)} f`;
+    if (statRows.pickupRadius) statRows.pickupRadius.textContent = `${Math.round(pickupRadius)} px`;
     if (statRows.defense) statRows.defense.textContent = `${defense}`;
 
     // attributes

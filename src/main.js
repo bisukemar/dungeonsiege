@@ -41,6 +41,171 @@ const optionsCloseBtn = document.getElementById('optionsCloseBtn');
 const adminToggle = document.getElementById('adminToggle');
 const joystick = createMobileJoystick(canvas);
 
+// ========= PLAYER SPRITE / ANIMATION =========
+const PLAYER_SHEET_ROWS = 10;
+const PLAYER_SPRITE_ROWS = {
+  idle: [0, 1, 2],
+  move: [3, 4, 5],
+  attack: [6, 7, 8],
+  death: [9]
+};
+const PLAYER_SPRITE_SCALE = 0.35;
+
+const playerSprite = {
+  img: new Image(),
+  ready: false,
+  frameW: 0,
+  frameH: 0,
+  cols: 1,
+  state: 'idle',
+  dir: 'down',
+  frame: 0,
+  frameTimer: 0,
+  attackTimer: 0
+};
+
+playerSprite.img.onload = () => {
+  playerSprite.frameH = playerSprite.img.height / PLAYER_SHEET_ROWS;
+  const assumedSquare = playerSprite.frameH || 1;
+  playerSprite.cols = Math.max(1, Math.floor(playerSprite.img.width / assumedSquare));
+  playerSprite.frameW = playerSprite.img.width / playerSprite.cols;
+  playerSprite.ready = true;
+};
+playerSprite.img.src = 'assets/player.png';
+
+// ========= GROUND TILE =========
+const ground = {
+  img: new Image(),
+  ready: false,
+  pattern: null,
+  size: 16
+};
+
+ground.img.onload = () => {
+  ground.ready = true;
+  ground.size = ground.img.width || 16;
+  ground.pattern = ctx.createPattern(ground.img, 'repeat');
+};
+ground.img.src = 'assets/grass.png';
+
+function facingDirFromVector(dx, dy) {
+  const ax = Math.abs(dx);
+  const ay = Math.abs(dy);
+  if (ax < 0.05 && ay < 0.05) return null;
+  if (ax > ay) return dx >= 0 ? 'right' : 'left';
+  return dy >= 0 ? 'down' : 'up';
+}
+
+function resolveRowForState(state, dir) {
+  const rows = PLAYER_SPRITE_ROWS[state] || PLAYER_SPRITE_ROWS.idle;
+  const dirIndex = dir === 'up' ? 2 : dir === 'down' ? 0 : 1;
+  const row = rows[Math.min(dirIndex, rows.length - 1)] ?? rows[0];
+  const flipX = dir === 'right';
+  return { row, flipX };
+}
+
+function lockAttackAnimation() {
+  playerSprite.attackTimer = Math.max(playerSprite.attackTimer, 18);
+  if (playerSprite.state !== 'attack') {
+    playerSprite.frame = 0;
+    playerSprite.frameTimer = 0;
+  }
+}
+
+function stepPlayerAnimation(moving, paused, isDead) {
+  if (!paused && playerSprite.attackTimer > 0) {
+    playerSprite.attackTimer--;
+  }
+
+  const dir = facingDirFromVector(player.dx, player.dy);
+  if (dir) playerSprite.dir = dir;
+
+  const nextState = isDead
+    ? 'death'
+    : playerSprite.attackTimer > 0
+    ? 'attack'
+    : moving
+    ? 'move'
+    : 'idle';
+
+  if (nextState !== playerSprite.state) {
+    playerSprite.state = nextState;
+    playerSprite.frame = 0;
+    playerSprite.frameTimer = 0;
+  }
+
+  if (!playerSprite.ready || paused) return;
+
+  const speedMap = { idle: 16, move: 8, attack: 6, death: 14 };
+  const step = speedMap[playerSprite.state] || 10;
+
+  playerSprite.frameTimer++;
+  if (playerSprite.frameTimer < step) return;
+  playerSprite.frameTimer = 0;
+
+  if (playerSprite.state === 'death') {
+    const last = Math.max(0, playerSprite.cols - 1);
+    if (playerSprite.frame < last) playerSprite.frame++;
+    return;
+  }
+
+  playerSprite.frame = (playerSprite.frame + 1) % playerSprite.cols;
+}
+
+function drawGround() {
+  if (ground.pattern) {
+    const tile = ground.size || 16;
+    const startX = Math.floor(cam.x / tile) * tile;
+    const startY = Math.floor(cam.y / tile) * tile;
+    const w = canvas.width + tile;
+    const h = canvas.height + tile;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(cam.x, cam.y, canvas.width, canvas.height);
+    ctx.clip();
+    ctx.fillStyle = ground.pattern;
+    ctx.fillRect(startX, startY, w, h);
+    ctx.restore();
+  } else {
+    ctx.fillStyle = '#151b22';
+    ctx.fillRect(cam.x, cam.y, canvas.width, canvas.height);
+  }
+}
+
+function drawPlayer(ctx, player) {
+  if (!playerSprite.ready || !playerSprite.frameW || !playerSprite.frameH) {
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, player.r, 0, Math.PI * 2);
+    ctx.fillStyle = 'cyan';
+    ctx.fill();
+    return { visualHeight: player.r * 2 };
+  }
+
+  const { row, flipX } = resolveRowForState(playerSprite.state, playerSprite.dir);
+  const sx = playerSprite.frame * playerSprite.frameW;
+  const sy = row * playerSprite.frameH;
+  const dw = playerSprite.frameW * PLAYER_SPRITE_SCALE;
+  const dh = playerSprite.frameH * PLAYER_SPRITE_SCALE;
+
+  ctx.save();
+  ctx.translate(player.x, player.y);
+  if (flipX) ctx.scale(-1, 1);
+  ctx.drawImage(
+    playerSprite.img,
+    sx,
+    sy,
+    playerSprite.frameW,
+    playerSprite.frameH,
+    -dw / 2,
+    -dh / 2,
+    dw,
+    dh
+  );
+  ctx.restore();
+
+  return { visualHeight: dh };
+}
+
 // ========= CANVAS / CAMERA =========
 function resize() {
   canvas.width = window.innerWidth;
@@ -391,7 +556,7 @@ function handleOverlayClosed() {
     bossEntity = null;
     monsters.length = 0;
     spawnTimer = 0;
-    addRandomObstacles(round);
+    obstacles.length = 0;
 
     paused = false;
     pausedText.style.display = 'none';
@@ -607,15 +772,31 @@ function openShopWithChoice() {
 
 // ========= OBSTACLES =========
 const obstacles = [];
-function addRandomObstacles(round) {
+function addRandomObstacles(round, playerRef) {
   const count = 2 + Math.floor(round / 2);
+  const maxAttempts = 20;
   for (let i = 0; i < count; i++) {
     const w = 120 + Math.random() * 80 + round * 4;
     const h = 80 + Math.random() * 80 + round * 4;
-    const x = Math.random() * (world.width - w);
-    const y = Math.random() * (world.height - h);
-    obstacles.push({ x, y, w, h });
+    let placed = false;
+    for (let attempt = 0; attempt < maxAttempts && !placed; attempt++) {
+      const x = Math.random() * (world.width - w);
+      const y = Math.random() * (world.height - h);
+      const rect = { x, y, w, h };
+      const overlapsPlayer =
+        playerRef &&
+        circleRectCollision(playerRef.x, playerRef.y, playerRef.r + 12, rect);
+      if (!overlapsPlayer) {
+        obstacles.push(rect);
+        placed = true;
+      }
+    }
   }
+}
+
+function resetObstaclesForRound(round, playerRef) {
+  obstacles.length = 0;
+  addRandomObstacles(round, playerRef);
 }
 
 function circleRectCollision(cx, cy, r, rect) {
@@ -645,12 +826,13 @@ let bossMode = false;
 let bossEntity = null;
 let regenTimer = 360;
 
-addRandomObstacles(1);
+// Obstacles are generated after each boss round (see resetObstaclesForRound).
 
 // ========= ROUND & SCALING =========
 function killsForRound(r) {
-  if (r <= 10) return 6 + r * 4;
-  return 6 + 10 * 4 + (r - 10) * 8;
+  const base = 8 + r * 5;              // ramps per round
+  const lateRamp = 1 + Math.max(0, r - 5) * 0.15; // more kills later
+  return Math.round(base * lateRamp);
 }
 function maxMonstersForRound(r) {
   let base = 4 + r * 2;
@@ -736,7 +918,7 @@ function onMonsterKilled(mon) {
 
   const need = killsForRound(round);
   if (!bossMode && killsThisRound >= need) {
-    if (round % 3 === 0) {
+    if (round % 5 === 0) {
       bossMode = true;
       bossEntity = spawnBoss(canvas, round);
       monsters.length = 0;
@@ -744,7 +926,6 @@ function onMonsterKilled(mon) {
     } else {
       round++;
       killsThisRound = 0;
-      addRandomObstacles(round);
       showMsg(`Round ${round} begins!`, 2000);
     }
   }
@@ -774,7 +955,7 @@ function hitTarget(mon, rawDmg, elem) {
       bossEntity = null;
       round++;
       killsThisRound = 0;
-      addRandomObstacles(round);
+      resetObstaclesForRound(round, player);
       showMsg(`Boss defeated! Round ${round} begins.`, 2500);
     } else {
       const idx = monsters.indexOf(mon);
@@ -803,8 +984,7 @@ function loop() {
   ctx.save();
   ctx.translate(-cam.x, -cam.y);
 
-  ctx.fillStyle = '#151b22';
-  ctx.fillRect(cam.x, cam.y, canvas.width, canvas.height);
+  drawGround();
 
   ctx.strokeStyle = 'rgba(255,255,255,0.06)';
   ctx.lineWidth = 1;
@@ -859,11 +1039,23 @@ function loop() {
     joystick && joystick.active ? { x: joystick.dirX, y: joystick.dirY } : null;
   player.move(keys, paused, canvas, analogInput);
 
-  // collide player with obstacles: if new position intersects, revert
+  // collide player with obstacles: if overlapping, gently slide out to the nearest edge
   obstacles.forEach((o) => {
-    if (circleRectCollision(player.x, player.y, player.r, o)) {
-      player.x = prevPx;
-      player.y = prevPy;
+    if (!circleRectCollision(player.x, player.y, player.r, o)) return;
+    const leftPen = player.x + player.r - o.x;
+    const rightPen = o.x + o.w - (player.x - player.r);
+    const topPen = player.y + player.r - o.y;
+    const bottomPen = o.y + o.h - (player.y - player.r);
+    const minPen = Math.min(leftPen, rightPen, topPen, bottomPen);
+    const push = Math.max(0.35, Math.min(minPen, 2.5)); // slow slide out
+    if (minPen === leftPen) {
+      player.x -= push;
+    } else if (minPen === rightPen) {
+      player.x += push;
+    } else if (minPen === topPen) {
+      player.y -= push;
+    } else {
+      player.y += push;
     }
   });
 
@@ -872,6 +1064,8 @@ function loop() {
   if (player.y < player.r) player.y = player.r;
   if (player.x > world.width - player.r) player.x = world.width - player.r;
   if (player.y > world.height - player.r) player.y = world.height - player.r;
+
+  const movedThisFrame = player.x !== prevPx || player.y !== prevPy;
 
 
   // ----- HP REGEN -----
@@ -889,13 +1083,14 @@ function loop() {
     const c = coins[i];
     const d = Math.hypot(c.x - player.x, c.y - player.y);
 
-    const basePickup = player.r + 10;          // original radius
+    const basePickup = player.r + 10; // baseline radius near the player
     const luck = (player.stats && player.stats.luck) || 0;
-    const extraPickup = luck * 2.5;            // +2.5px per Luck
-    let pickupRadius = basePickup + extraPickup;
 
-    // hard cap so it doesn't vacuum the whole map
-    if (pickupRadius > 160) pickupRadius = 160;
+    // Scale LUK so 99 LUK can reach roughly the whole screen.
+    const screenRadius = Math.hypot(canvas.width, canvas.height) / 2;
+    const extraPerLuck = screenRadius / 99;
+    let pickupRadius = basePickup + luck * extraPerLuck;
+    if (pickupRadius > screenRadius) pickupRadius = screenRadius;
 
     if (d < pickupRadius) {
       player.gold = (player.gold || 0) + c.amount;
@@ -919,11 +1114,22 @@ function loop() {
         const nearest = (x, y) =>
           bossMode && bossEntity ? bossEntity : nearestMonster(x, y, monsters);
 
+        const nearestWithFacing = (x, y) => {
+          const target = nearest(x, y);
+          if (target) {
+            const ang = Math.atan2(target.y - player.y, target.x - player.x);
+            player.dx = Math.cos(ang);
+            player.dy = Math.sin(ang);
+          }
+          return target;
+        };
+
         function useSkill(key, baseCdFrames, caster) {
           const lvl = getEffectiveSkillLevel(key);
           if (lvl <= 0) return;
           if (player.skillCooldowns[key] > 0) return;
           caster();
+          lockAttackAnimation();
           const agiFactor = Math.floor(player.stats.agi * 1);
           let cd = baseCdFrames - agiFactor;
           if (cd < 10) cd = 10;
@@ -931,13 +1137,13 @@ function loop() {
         }
 
         useSkill('Fireball', 90, () =>
-          castFireball(player, playerProjectiles, nearest)
+          castFireball(player, playerProjectiles, nearestWithFacing)
         );
         useSkill('Arrow', 40, () =>
-          castArrow(player, playerProjectiles, nearest)
+          castArrow(player, playerProjectiles, nearestWithFacing)
         );
         useSkill('Ice', 120, () => {
-          const t = nearest(player.x, player.y);
+          const t = nearestWithFacing(player.x, player.y);
           if (!t) return;
           const ang = Math.atan2(t.y - player.y, t.x - player.x);
           player.dx = Math.cos(ang);
@@ -945,7 +1151,7 @@ function loop() {
           castIceWave(player, iceWaves);
         });
         useSkill('Bash', 70, () => {
-          const t = nearest(player.x, player.y);
+          const t = nearestWithFacing(player.x, player.y);
           if (!t) return;
           const ang = Math.atan2(t.y - player.y, t.x - player.x);
           player.dx = Math.cos(ang);
@@ -955,7 +1161,7 @@ function loop() {
         useSkill('Magnum', 180, () => castMagnum(player, magnumWaves));
 		  
 		  useSkill('Meteor', 240, () =>
-        castMeteorStorm(player, meteorStrikes, nearest)
+        castMeteorStorm(player, meteorStrikes, nearestWithFacing)
       );
 		  
       }
@@ -1309,17 +1515,19 @@ function loop() {
     ctx.fill();
   });
 
+  stepPlayerAnimation(movedThisFrame, paused, player.hp <= 0);
+
   // ----- PLAYER -----
-  ctx.beginPath();
-  ctx.arc(player.x, player.y, player.r, 0, Math.PI * 2);
-  ctx.fillStyle = 'cyan';
-  ctx.fill();
+  const playerDraw = drawPlayer(ctx, player);
 
   const hpFrac = Math.max(0, Math.min(1, player.hp / player.getMaxHp()));
 
   // HP bar background
   ctx.fillStyle = 'rgba(0,0,0,0.7)';
-  ctx.fillRect(player.x - 20, player.y - 28, 40, 6);
+  const barWidth = 40;
+  const barY =
+    player.y - (playerDraw?.visualHeight || player.r * 2) / 2 - 12;
+  ctx.fillRect(player.x - barWidth / 2, barY, barWidth, 6);
 
   // HP bar color: green >50%, orange >25–50%, red ≤25%
   let hpColor = '#22c55e'; // green
@@ -1330,7 +1538,7 @@ function loop() {
   }
 
   ctx.fillStyle = hpColor;
-  ctx.fillRect(player.x - 20, player.y - 28, 40 * hpFrac, 6);
+  ctx.fillRect(player.x - barWidth / 2, barY, barWidth * hpFrac, 6);
 
 
   // ----- DAMAGE TEXTS -----
