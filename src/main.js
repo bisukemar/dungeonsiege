@@ -944,11 +944,11 @@ if (installBtn) {
       return;
     }
     if (!installSupported) {
-      alert('On iOS: Open in Safari, tap Share, then "Add to Home Screen" to install.');
+      showMsg('iOS: Open in Safari → Share → "Add to Home Screen"', 2800);
       return;
     }
     if (!installReady || !deferredInstallPrompt) {
-      alert('Install prompt not ready yet. Please try again soon.');
+      showMsg('Install prompt not ready. Try again shortly.', 1800);
       return;
     }
     deferredInstallPrompt.prompt();
