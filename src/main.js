@@ -110,6 +110,39 @@ function spritePathForGender(g) {
   return g === 'female' ? 'assets/player_f.png' : 'assets/player.png';
 }
 
+function handleLevelUp() {
+  player.statPoints += 5;
+  player.skillPoints += 1;
+
+  const L = player.level;
+  function unlock(key) {
+    if (!player.unlocks) player.unlocks = {};
+    if (!player.unlocks[key]) player.unlocks[key] = true;
+  }
+
+  if (L >= 2) unlock('Fireball');
+  if (L >= 3) unlock('Bash');
+  if (L >= 4) {
+    unlock('Arrow');
+    unlock('Toughness');
+    unlock('Haste');
+    unlock('Precision');
+    unlock('HPRegen');
+  }
+  if (L >= 5) {
+    unlock('Magnum');
+    unlock('DoubleAttack');
+  }
+  if (L >= 6) {
+    unlock('Ice');
+    unlock('ArrowShower');
+  }
+  if (L >= 7) unlock('Quagmire');
+  if (L >= 8) unlock('Meteor');
+
+  openOverlay('Stats');
+}
+
 function getMonsterSprite(def){
   if (!def || !def.src) return null;
   if (monsterSpriteCache.has(def.src)) return monsterSpriteCache.get(def.src);
@@ -997,7 +1030,7 @@ titleStartBtn.onclick = () => {
   // Ensure player is at Level 1 baseline
   player.level = 1;
   player.exp = 0;
-  player.expToLevel = 50;
+  player.expToLevel = 0;
   player.hp = player.getMaxHp();
 
   // Unlock starting active skills so the player can choose one
@@ -1295,6 +1328,33 @@ function pickChestOptions(poolIds) {
   return picks;
 }
 
+function chestItemIcon(item){
+  const box = document.createElement('div');
+  box.style.width = '76px';
+  box.style.height = '76px';
+  box.style.borderRadius = '.55rem';
+  box.style.background = 'linear-gradient(180deg, #fefefe 0%, #e5edfb 100%)';
+  box.style.border = '1px dashed #b8cff1';
+  box.style.display = 'flex';
+  box.style.alignItems = 'center';
+  box.style.justifyContent = 'center';
+  box.style.overflow = 'hidden';
+  const src = item?.sprite;
+  if (src) {
+    const img = new Image();
+    img.src = src;
+    img.style.maxWidth = '70px';
+    img.style.maxHeight = '70px';
+    img.style.objectFit = 'contain';
+    box.appendChild(img);
+  } else {
+    box.textContent = 'Icon';
+    box.style.fontSize = '.75rem';
+    box.style.color = '#6b7280';
+  }
+  return box;
+}
+
 function openChestOverlay(chest) {
   if (!chest) return;
   chest.opened = true;
@@ -1377,49 +1437,53 @@ function openChestOverlay(chest) {
 
   options.forEach((item) => {
     const card = document.createElement('div');
-    card.style.display = 'grid';
-    card.style.gridTemplateRows = 'auto auto 1fr auto';
-    card.style.gap = '.3rem';
-    card.style.padding = '.65rem .7rem';
-    card.style.background = 'rgba(255,255,255,0.95)';
+    card.style.display = 'flex';
+    card.style.flexDirection = 'column';
+    card.style.gap = '.4rem';
+    card.style.padding = '.7rem .75rem';
+    card.style.background = 'rgba(255,255,255,0.96)';
     card.style.border = '1px solid #b8cff1';
-    card.style.borderRadius = '.65rem';
+    card.style.borderRadius = '.7rem';
     card.style.boxShadow = '0 8px 20px rgba(13,35,78,0.12)';
+
+    const topRow = document.createElement('div');
+    topRow.style.display = 'flex';
+    topRow.style.alignItems = 'center';
+    topRow.style.gap = '.6rem';
+    card.appendChild(topRow);
+
+    topRow.appendChild(chestItemIcon(item));
+
+    const infoCol = document.createElement('div');
+    infoCol.style.display = 'flex';
+    infoCol.style.flexDirection = 'column';
+    infoCol.style.gap = '.12rem';
+    topRow.appendChild(infoCol);
+
+    const name = document.createElement('div');
+    name.textContent = item.name;
+    name.style.fontWeight = '700';
+    name.style.fontSize = '.92rem';
+    infoCol.appendChild(name);
 
     const rarityRow = document.createElement('div');
     rarityRow.style.display = 'flex';
-    rarityRow.style.justifyContent = 'space-between';
     rarityRow.style.alignItems = 'center';
+    rarityRow.style.gap = '.45rem';
     rarityRow.appendChild(rarityTag(item));
     const slotSpan = document.createElement('span');
     slotSpan.textContent = item.slot ? (SLOT_LABEL[item.slot] || item.slot) : 'Item';
     slotSpan.style.fontSize = '.72rem';
     slotSpan.style.opacity = '0.8';
     rarityRow.appendChild(slotSpan);
-    card.appendChild(rarityRow);
-
-    const name = document.createElement('div');
-    name.textContent = item.name;
-    name.style.fontWeight = '700';
-    name.style.fontSize = '.9rem';
-    card.appendChild(name);
-
-    const spriteBox = document.createElement('div');
-    spriteBox.style.height = '70px';
-    spriteBox.style.borderRadius = '.55rem';
-    spriteBox.style.background = 'linear-gradient(180deg, #fefefe 0%, #e5edfb 100%)';
-    spriteBox.style.border = '1px dashed #b8cff1';
-    spriteBox.style.display = 'flex';
-    spriteBox.style.alignItems = 'center';
-    spriteBox.style.justifyContent = 'center';
-    spriteBox.textContent = 'Item Sprite';
-    spriteBox.style.color = '#6b7280';
-    spriteBox.style.fontSize = '.75rem';
-    card.appendChild(spriteBox);
+    infoCol.appendChild(rarityRow);
 
     const desc = document.createElement('div');
     desc.style.fontSize = '.76rem';
-    desc.style.opacity = '0.88';
+    desc.style.opacity = '0.9';
+    desc.style.lineHeight = '1.35';
+    desc.style.whiteSpace = 'normal';
+    desc.style.wordBreak = 'break-word';
     desc.textContent = summarizeItem(item);
     card.appendChild(desc);
 
@@ -1655,7 +1719,7 @@ function updateHUD() {
   const need = killsForRound(round);
   const bossTxt = bossMode ? ' BOSS ROUND' : '';
   uiDiv.textContent =
-    `LV ${player.level}  EXP ${player.exp}/${player.expToLevel}${bossTxt}\n` +
+    `LV ${player.level}${bossTxt}\n` +
     `HP ${Math.round(player.hp)}/${Math.round(player.getMaxHp())}\n` +
     `StatPts: ${player.statPoints}   SkillPts: ${player.skillPoints}\n` +
     `Gold: ${player.gold || 0}\n` +
@@ -1672,37 +1736,6 @@ function togglePause() {
   }
 }
 
-function handleLevelUp() {
-  player.statPoints += 5;
-  player.skillPoints += 1;
-
-  const L = player.level;
-  function unlock(key) {
-    if (!player.unlocks[key]) player.unlocks[key] = true;
-  }
-
-  if (L >= 2) unlock('Fireball');
-  if (L >= 3) unlock('Bash');
-  if (L >= 4) {
-    unlock('Arrow');
-    unlock('Toughness');
-    unlock('Haste');
-    unlock('Precision');
-    unlock('HPRegen');
-  }
-  if (L >= 5) {
-    unlock('Magnum');
-    unlock('DoubleAttack');
-  }
-  if (L >= 6) {
-    unlock('Ice');
-    unlock('ArrowShower');
-  }
-  if (L >= 7) unlock('Quagmire');
-  if (L >= 8) unlock('Meteor');
-
-  openOverlay('Stats');
-}
 
 function onMonsterKilled(mon) {
   killsThisRound++;
@@ -1725,7 +1758,9 @@ function onMonsterKilled(mon) {
     } else {
       round++;
       killsThisRound = 0;
-      showMsg(`Round ${round} begins!`, 2000);
+      player.level++;
+      handleLevelUp();
+      showMsg(`Round ${round} begins! Lv ${player.level}`, 2000);
     }
   }
 }
@@ -1751,9 +1786,6 @@ function handleMonsterDeath(mon) {
     if (idx >= 0) monsters.splice(idx, 1);
     onMonsterKilled(mon);
   }
-  player.gainExp(mon.expValue || 5, (leveled) => {
-    if (leveled) handleLevelUp();
-  });
 }
 
 function hitTarget(mon, rawDmg, elem) {

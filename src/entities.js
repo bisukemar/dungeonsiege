@@ -144,22 +144,8 @@ export class Player {
   // Vampire Survivors–style EXP curve:
   // - Early levels: cheap, so players level up quickly.
   // - Every 10 levels, EXP jumps a bit harder.
- getExpToLevelRequirement(level){
-    const base = 20;                       // cost for level 1 → 2
-    const linear = base + (level - 1) * 8; // base linear growth
-
-    // Mild scaling every 10 levels (same as before)
-    let curveFactor = 1 + Math.floor((level - 1) / 10) * 0.25;
-
-    // After level 10, ramp up strongly so post-boss leveling slows down
-    if (level > 10) {
-      const over = level - 10;            // how far past 10 we are
-      // Each level past 10 multiplies the requirement more and more
-      curveFactor *= (1 + over * 0.7);    // L11 ≈ 2.1x, L15 ≈ 5.6x, etc.
-    }
-
-    const req = Math.floor(linear * curveFactor);
-    return Math.max(20, req);
+  getExpToLevelRequirement(level){
+    return 0; // EXP disabled
   }
 
 
@@ -266,17 +252,7 @@ export class Player {
     this.defaultAttackTimer = cd;
   }
 
-    gainExp(amount, onLevelUp){
-    this.exp += amount;
-
-    // Allow multiple level-ups if you gain a big chunk of EXP at once
-    while (this.exp >= this.expToLevel){
-      this.exp -= this.expToLevel;
-      this.level++;
-      this.expToLevel = this.getExpToLevelRequirement(this.level);
-      if (onLevelUp) onLevelUp(this.level);
-    }
-  }
+  // EXP system disabled; leveling handled per-round externally.
 
 }
 

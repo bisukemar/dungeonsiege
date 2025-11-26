@@ -364,7 +364,7 @@ export function makeOverlay(doc, player, onClose, opts = {}){
   const hpBar = makeBarRow('HP', '#ef4444', '#f97316');
   hpMpCol.appendChild(hpBar.row);
 
-  // middle: level / EXP
+  // middle: level
   const c2 = doc.createElement('div');
   c2.style.display = 'flex';
   c2.style.flexDirection = 'column';
@@ -388,25 +388,7 @@ export function makeOverlay(doc, player, onClose, opts = {}){
   lvlValue.style.fontWeight = '600';
   lvlRow.appendChild(lvlValue);
 
-  const expBarOuter = doc.createElement('div');
-  expBarOuter.style.width = '100%';
-  expBarOuter.style.height = '6px';
-  expBarOuter.style.borderRadius = '999px';
-  expBarOuter.style.background = '#e3efff';
-  expBarOuter.style.overflow = 'hidden';
-  c2.appendChild(expBarOuter);
-
-  const expBarInner = doc.createElement('div');
-  expBarInner.style.height = '100%';
-  expBarInner.style.width = '0%';
-  expBarInner.style.borderRadius = '999px';
-  expBarInner.style.background = 'linear-gradient(to right, #a855f7, #22c55e)';
-  expBarOuter.appendChild(expBarInner);
-
-  const expText = doc.createElement('div');
-  expText.style.fontSize = '.72rem';
-  expText.style.opacity = '.85';
-  c2.appendChild(expText);
+  // EXP removed
 
   // right: gold + points
   const c3 = doc.createElement('div');
@@ -1013,6 +995,7 @@ export function makeOverlay(doc, player, onClose, opts = {}){
 
   function setShopMode(mode){
     shopMode = mode;
+    activeItemFilters = new Set(['All']);
     updateShopModeButtons();
     if (currentRightMode === 'Shop') renderRightPanel();
   }
@@ -1086,7 +1069,7 @@ export function makeOverlay(doc, player, onClose, opts = {}){
     dropdown.style.color = '#1b2d4b';
     dropdown.style.fontSize = '.78rem';
 
-    ITEM_FILTERS.forEach((cat, idx) => {
+  ITEM_FILTERS.forEach((cat, idx) => {
       const row = doc.createElement('label');
       row.style.display = 'flex';
       row.style.alignItems = 'center';
@@ -1545,12 +1528,13 @@ export function makeOverlay(doc, player, onClose, opts = {}){
         eqBox.appendChild(row);
       });
       rightPanel.appendChild(eqBox);
-    } else {
-      rightPanel.appendChild(invList);
-      shopList.style.display = 'none';
-      invList.style.display = 'flex';
-      renderInventoryPanel();
-    }
+  } else {
+    rightPanel.appendChild(invList);
+    shopList.style.display = 'none';
+    invList.style.display = 'flex';
+    activeItemFilters = new Set(['All']);
+    renderInventoryPanel();
+  }
   }
 
   // ========= SKILLS RENDER =========
@@ -1784,15 +1768,7 @@ export function makeOverlay(doc, player, onClose, opts = {}){
 
 
     const lvl = player.level || 1;
-    const exp = player.exp || 0;
-    const getReq = player.getExpToLevelRequirement ? player.getExpToLevelRequirement.bind(player) : null;
-    const span = player.expToLevel != null ? player.expToLevel : (getReq ? getReq(lvl) : 100);
-    const current = Math.max(0, exp);
-    const expPct = span > 0 ? Math.max(0, Math.min(1, current / span)) : 0;
-
-    expBarInner.style.width = (expPct * 100) + '%';
     lvlValue.textContent = `Lv ${lvl}`;
-    expText.textContent = `${Math.floor(current)}/${span} EXP to next level`;
 
     const sp = player.statPoints || 0;
     const kp = player.skillPoints || 0;
@@ -1883,6 +1859,7 @@ export function makeOverlay(doc, player, onClose, opts = {}){
     });
 
     // skill list + shop / inv
+    activeItemFilters = new Set(['All']);
     renderSkills();
     renderRightPanel();
     updateShopModeButtons();
