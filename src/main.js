@@ -48,6 +48,7 @@ const optionsCloseBtn = document.getElementById('optionsCloseBtn');
 const adminToggle = document.getElementById('adminToggle');
 const genderMaleRadio = document.getElementById('genderMale');
 const genderFemaleRadio = document.getElementById('genderFemale');
+const installBtn = document.getElementById('installBtn');
 const genderPreview = document.getElementById('genderPreview');
 const genderPreviewCtx = genderPreview ? genderPreview.getContext('2d') : null;
 const joystick = createMobileJoystick(canvas);
@@ -601,6 +602,7 @@ let preGameSetup = false;     // true only during the initial allocation
 let gameLoopStarted = false;  // so we don't start loop twice
 let pendingLeaderboardLevel = null;
 let previewAnimStarted = false;
+let deferredInstallPrompt = null;
 let activeChest = null;
 
 const RARITY_COLOR = {
@@ -761,6 +763,15 @@ function startGameLoop() {
   requestAnimationFrame(loop);
 }
 
+// Service worker registration for PWA installability
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch((err) => {
+      console.warn('SW registration failed', err);
+    });
+  });
+}
+
 function stepGenderPreview() {
   if (!genderPreviewCtx || !genderPreview) return;
   requestAnimationFrame(stepGenderPreview);
@@ -884,6 +895,30 @@ if (nameModal) {
   nameModal.addEventListener('click', (e) => {
     if (e.target === nameModal) submitNameModal(false);
   });
+}
+
+// PWA install prompt
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  if (installBtn) installBtn.style.display = 'block';
+});
+
+if (installBtn) {
+  installBtn.style.display = 'none';
+  installBtn.onclick = async () => {
+    if (!deferredInstallPrompt) {
+      alert('Install prompt not ready. Please try again soon.');
+      return;
+    }
+    deferredInstallPrompt.prompt();
+    const { outcome } = await deferredInstallPrompt.userChoice;
+    if (outcome === 'accepted') {
+      installBtn.textContent = 'Installed';
+      installBtn.disabled = true;
+    }
+    deferredInstallPrompt = null;
+  };
 }
 
 // Called when "Start Game" is clicked on title screen

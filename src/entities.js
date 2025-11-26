@@ -182,7 +182,7 @@ export class Player {
   }
 
   getCritChance(){
-    let cc = 0.05 + this.stats.luck*0.005;
+    let cc = 0.05 + this.stats.luck*0.003;
     for (const slot in this.equip){
       const it = this.equip[slot];
       if (!it) continue;

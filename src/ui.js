@@ -1816,9 +1816,41 @@ export function makeOverlay(doc, player, onClose, opts = {}){
     const pickupRadius = Math.min(screenRadius, basePickup + luck * extraPerLuck);
     const defense = player.defense || 0;
 
-    if (statRows.critChance) statRows.critChance.textContent = `${Math.round(cc * 100)}%`;
-    if (statRows.critDamage) statRows.critDamage.textContent = `${Math.round(cd * 100) / 100}x`;
-    if (statRows.moveSpeed) statRows.moveSpeed.textContent = `${ms.toFixed(2)} u/f`;
+    // helper to format base + bonus with colored bonus
+    const formatBaseBonus = (base, total, suffix='') => {
+      const bonus = Math.max(0, total - base);
+      const baseTxt = `${base}${suffix}`;
+      const bonusTxt = bonus > 0 ? ` <span style="color:#16a34a;">(+${bonus}${suffix})</span>` : '';
+      return baseTxt + bonusTxt;
+    };
+
+    // Crit chance: base from LUK + 5%, bonus = gear/skills (cap-aware)
+    const baseCrit = Math.min(0.8, 0.05 + luck * 0.003);
+    const bonusCrit = Math.max(0, cc - baseCrit);
+    if (statRows.critChance) {
+      statRows.critChance.innerHTML = `${(baseCrit * 100).toFixed(1)}%` +
+        (bonusCrit > 0 ? ` <span style="color:#16a34a;">(+${(bonusCrit * 100).toFixed(1)}%)</span>` : '');
+    }
+
+    // Crit damage: base 1.5x
+    const baseCd = 1.5;
+    const bonusCd = Math.max(0, cd - baseCd);
+    if (statRows.critDamage) {
+      statRows.critDamage.innerHTML = `${baseCd.toFixed(2)}x` +
+        (bonusCd > 0 ? ` <span style="color:#16a34a;">(+${bonusCd.toFixed(2)}x)</span>` : '');
+    }
+
+    // Move speed: base from AGI, bonus from gear
+    const baseMs = Math.min(5.5, Math.max(1.2, 2.4 + (player.stats?.agi || 0) * 0.04));
+    const bonusMs = Math.max(0, ms - baseMs);
+    if (statRows.moveSpeed) {
+      statRows.moveSpeed.innerHTML = `${baseMs.toFixed(2)} u/f` +
+        (bonusMs > 0.0001 ? ` <span style="color:#16a34a;">(+${bonusMs.toFixed(2)})</span>` : '');
+    }
+
+    if (statRows.attackSpeed) statRows.attackSpeed.textContent = `${atkSpd.toFixed(2)} /s`;
+    if (statRows.pickupRadius) statRows.pickupRadius.textContent = `${Math.round(pickupRadius)} px`;
+    if (statRows.defense) statRows.defense.textContent = `${defense}`;
     if (statRows.attackSpeed) statRows.attackSpeed.textContent = `${atkSpd.toFixed(2)} /s`;
     if (statRows.pickupRadius) statRows.pickupRadius.textContent = `${Math.round(pickupRadius)} px`;
     if (statRows.defense) statRows.defense.textContent = `${defense}`;
