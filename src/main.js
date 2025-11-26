@@ -912,7 +912,7 @@ function updateInstallBtn() {
     return;
   }
   if (!installSupported) {
-    installBtn.textContent = 'How to Add to Home';
+    installBtn.textContent = 'How to Install App';
     installBtn.disabled = false;
     installBtn.style.opacity = '1';
     installBtn.style.cursor = 'pointer';
