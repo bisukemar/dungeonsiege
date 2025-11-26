@@ -369,12 +369,31 @@
 
     .ranking-card {
       max-width: 480px;
+      width: 92vw;
+      max-height: 80vh;
+      overflow: auto;
     }
 
     #rankingList {
-      max-height: 320px;
+      max-height: 60vh;
       overflow-y: auto;
       line-height: 1.5;
+    }
+
+    @media (max-width: 780px) {
+      .options-card {
+        width: 92vw;
+        max-width: 92vw;
+        padding: .9rem 1rem;
+      }
+      .options-card h3 {
+        font-size: 1rem;
+      }
+      .ranking-card {
+        width: 94vw;
+        max-width: 94vw;
+        padding: .9rem 1rem;
+      }
     }
 
     /* Name capture modal */
