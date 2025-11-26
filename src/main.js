@@ -604,6 +604,7 @@ let pendingLeaderboardLevel = null;
 let previewAnimStarted = false;
 let deferredInstallPrompt = null;
 let installReady = false;
+let installSupported = false;
 let activeChest = null;
 
 const RARITY_COLOR = {
@@ -902,6 +903,21 @@ if (nameModal) {
 function updateInstallBtn() {
   if (!installBtn) return;
   installBtn.style.display = 'block';
+  const installed = isAppInstalled();
+  if (installed) {
+    installBtn.textContent = 'Installed';
+    installBtn.disabled = true;
+    installBtn.style.cursor = 'default';
+    installBtn.style.opacity = '0.7';
+    return;
+  }
+  if (!installSupported) {
+    installBtn.textContent = 'How to Add to Home';
+    installBtn.disabled = false;
+    installBtn.style.opacity = '1';
+    installBtn.style.cursor = 'pointer';
+    return;
+  }
   installBtn.disabled = !installReady;
   installBtn.textContent = installReady ? 'Install App' : 'Install (not available)';
   installBtn.style.opacity = installReady ? '1' : '0.6';
@@ -912,14 +928,27 @@ window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   deferredInstallPrompt = e;
   installReady = true;
+  installSupported = true;
   updateInstallBtn();
 });
+
+function isAppInstalled() {
+  return window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone;
+}
 
 if (installBtn) {
   updateInstallBtn();
   installBtn.onclick = async () => {
+    if (isAppInstalled()) {
+      updateInstallBtn();
+      return;
+    }
+    if (!installSupported) {
+      alert('On iOS: Open in Safari, tap Share, then "Add to Home Screen" to install.');
+      return;
+    }
     if (!installReady || !deferredInstallPrompt) {
-      alert('Install prompt not ready yet. It appears after the browser is eligible.');
+      alert('Install prompt not ready yet. Please try again soon.');
       return;
     }
     deferredInstallPrompt.prompt();
