@@ -11,6 +11,8 @@
 - Added a gold change animation when buying or selling items.
 - Added sprites for each item
 - Added icons for each skills and adjusted the skill panel display to reflect more information
+- Stat bonus will now indicated properly in the character info, item and skill bonus will be displayed in parenthesis beside the base stats
+- Added Install App Button in the title menu to add the app on the homescreen of the device.
 
 11-23-2025 Update
 
