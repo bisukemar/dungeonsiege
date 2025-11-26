@@ -603,6 +603,7 @@ let gameLoopStarted = false;  // so we don't start loop twice
 let pendingLeaderboardLevel = null;
 let previewAnimStarted = false;
 let deferredInstallPrompt = null;
+let installReady = false;
 let activeChest = null;
 
 const RARITY_COLOR = {
@@ -898,17 +899,27 @@ if (nameModal) {
 }
 
 // PWA install prompt
+function updateInstallBtn() {
+  if (!installBtn) return;
+  installBtn.style.display = 'block';
+  installBtn.disabled = !installReady;
+  installBtn.textContent = installReady ? 'Install App' : 'Install (not available)';
+  installBtn.style.opacity = installReady ? '1' : '0.6';
+  installBtn.style.cursor = installReady ? 'pointer' : 'not-allowed';
+}
+
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   deferredInstallPrompt = e;
-  if (installBtn) installBtn.style.display = 'block';
+  installReady = true;
+  updateInstallBtn();
 });
 
 if (installBtn) {
-  installBtn.style.display = 'none';
+  updateInstallBtn();
   installBtn.onclick = async () => {
-    if (!deferredInstallPrompt) {
-      alert('Install prompt not ready. Please try again soon.');
+    if (!installReady || !deferredInstallPrompt) {
+      alert('Install prompt not ready yet. It appears after the browser is eligible.');
       return;
     }
     deferredInstallPrompt.prompt();
@@ -916,8 +927,11 @@ if (installBtn) {
     if (outcome === 'accepted') {
       installBtn.textContent = 'Installed';
       installBtn.disabled = true;
+      installBtn.style.cursor = 'default';
     }
     deferredInstallPrompt = null;
+    installReady = false;
+    updateInstallBtn();
   };
 }
 
