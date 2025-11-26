@@ -1,5 +1,17 @@
+const DEFAULT_SPRITE = null; // sprites disabled for now
+
 export const MONSTER_DB = [
-  { name:'Breeze Slime', level:1, hp:24, exp:4, element:'WIND',   defense:0,   speed:1.2, attackType:'melee',  attackRange:22,  attackDamage:6,  attackCooldown:45 },
+  { name:'Breeze Slime', level:1, hp:24, exp:4, element:'WIND',   defense:0,   speed:1.2, attackType:'melee',  attackRange:22,  attackDamage:6,  attackCooldown:45,
+    // Sprite sheet uses 13 rows (0–12) and ~7 cols based on player-style layout.
+    // Rows: 0-2 idle, 3-5 move, 6-8 attack, 9-11 damaged, 12 death.
+    sprite:{
+      src:'assets/mob/breezeslime.png',
+      rows:13,
+      cols:7,
+      rowMap:{ idle:0, move:3, attackR:6, attackL:6, death:12 },
+      frameCounts:{ idle:6, move:6, attackR:6, attackL:6, death:1 }
+    }
+  },
   { name:'White Shade',  level:1, hp:22, exp:3, element:'NEUTRAL',defense:0,   speed:1.1, attackType:'melee',  attackRange:20,  attackDamage:5,  attackCooldown:45 },
   { name:'Gust Wolf',    level:2, hp:36, exp:6, element:'WIND',   defense:0.5, speed:1.6, attackType:'melee',  attackRange:28,  attackDamage:8,  attackCooldown:45 },
   { name:'Cinder Imp',   level:2, hp:34, exp:6, element:'FIRE',   defense:1,   speed:1.0, attackType:'ranged', attackRange:240, attackDamage:6,  attackCooldown:65 },
@@ -16,9 +28,100 @@ export const MONSTER_DB = [
 ];
 
 export const BOSS_DB = [
-  { name:'Ancient Treant',  baseHp:1200, element:'EARTH',  defense:6, speed:0.9,  attackType:'melee',  attackRange:45,  attackDamage:25, attackCooldown:60, color:'#7b9b5f' },
-  { name:'Inferno Drake',   baseHp:1000, element:'FIRE',   defense:4, speed:1.2,  attackType:'ranged', attackRange:420, attackDamage:28, attackCooldown:55, color:'#ff6a3d' },
-  { name:'Leviathan Spawn', baseHp:1100, element:'WATER',  defense:5, speed:1.0,  attackType:'ranged', attackRange:440, attackDamage:26, attackCooldown:55, color:'#49b0ff' },
-  { name:'Tempest Hydra',   baseHp:950,  element:'WIND',   defense:4, speed:1.3,  attackType:'ranged', attackRange:460, attackDamage:24, attackCooldown:50, color:'#7fe27f' },
-  { name:'Phantom King',    baseHp:900,  element:'NEUTRAL',defense:5, speed:1.1,  attackType:'melee',  attackRange:50,  attackDamage:30, attackCooldown:58, color:'#eaeaea' }
+  {
+    name:'Ancient Treant',
+    baseHp:1200,
+    element:'EARTH',
+    defense:6,
+    speed:0.9,
+    attackType:'melee',
+    attackRange:45,
+    attackDamage:25,
+    attackCooldown:60,
+    color:'#7b9b5f',
+    skills:[
+      { key:'Bash', level:3 },
+      { key:'Magnum', level:2 },
+      { key:'Toughness', level:3 }
+    ],
+    bossDrops:['earthbreaker_sash','ember_crown','hydra_band'],
+    sprite:DEFAULT_SPRITE
+  },
+  {
+    name:'Inferno Drake',
+    baseHp:1000,
+    element:'FIRE',
+    defense:4,
+    speed:1.2,
+    attackType:'ranged',
+    attackRange:420,
+    attackDamage:28,
+    attackCooldown:55,
+    color:'#ff6a3d',
+    skills:[
+      { key:'Fireball', level:4, cooldown:180 },
+      { key:'Meteor', level:2, cooldownMult:1.8 },
+      { key:'Haste', level:2 }
+    ],
+    skillCooldownFactor:1.5,
+    bossDrops:['ember_crown','phoenix_charm','stormrunner_boots'],
+    sprite:DEFAULT_SPRITE
+  },
+  {
+    name:'Leviathan Spawn',
+    baseHp:1100,
+    element:'WATER',
+    defense:5,
+    speed:1.0,
+    attackType:'ranged',
+    attackRange:440,
+    attackDamage:26,
+    attackCooldown:55,
+    color:'#49b0ff',
+    skills:[
+      { key:'Ice', level:4 },
+      { key:'Magnum', level:2 },
+      { key:'HPRegen', level:2 }
+    ],
+    bossDrops:['tidal_robe','hydra_band','phoenix_charm'],
+    sprite:DEFAULT_SPRITE
+  },
+  {
+    name:'Tempest Hydra',
+    baseHp:950,
+    element:'WIND',
+    defense:4,
+    speed:1.3,
+    attackType:'ranged',
+    attackRange:460,
+    attackDamage:24,
+    attackCooldown:50,
+    color:'#7fe27f',
+    skills:[
+      { key:'Arrow', level:4 },
+      { key:'Bash', level:3 },
+      { key:'Haste', level:2 }
+    ],
+    bossDrops:['stormrunner_boots','hydra_band','ember_crown'],
+    sprite:DEFAULT_SPRITE
+  },
+  {
+    name:'Phantom King',
+    baseHp:900,
+    element:'NEUTRAL',
+    defense:5,
+    speed:1.1,
+    attackType:'melee',
+    attackRange:50,
+    attackDamage:30,
+    attackCooldown:58,
+    color:'#eaeaea',
+    skills:[
+      { key:'Magnum', level:3 },
+      { key:'Bash', level:3 },
+      { key:'HPRegen', level:3 }
+    ],
+    bossDrops:['earthbreaker_sash','phoenix_charm','tidal_robe'],
+    sprite:DEFAULT_SPRITE
+  }
 ];

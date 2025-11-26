@@ -4,6 +4,7 @@ export const SKILL_DB = {
     name:'Fireball',
     category:'Magic',
     element:'FIRE',
+    icon:'assets/skill/Fireball.gif',
     maxLevel:7,
     perLevel:2,
     cooldown:90,
@@ -16,6 +17,7 @@ export const SKILL_DB = {
     name:'Arrow Shot',
     category:'Physical',
     element:'NEUTRAL',
+    icon:'assets/skill/Arrow.gif',
     maxLevel:7,
     perLevel:2,
     cooldown:40,
@@ -41,6 +43,7 @@ export const SKILL_DB = {
     name:'Ice Wave',
     category:'Magic',
     element:'WATER',
+    icon:'assets/skill/Ice.gif',
     maxLevel:7,
     perLevel:2,
     cooldown:120,
@@ -53,6 +56,7 @@ export const SKILL_DB = {
     name:'Bash',
     category:'Physical',
     element:'NEUTRAL',
+    icon:'assets/skill/Bash.gif',
     maxLevel:7,
     perLevel:2,
     cooldown:70,
@@ -65,6 +69,7 @@ export const SKILL_DB = {
     name:'Magnum Break',
     category:'Physical',
     element:'NEUTRAL',
+    icon:'assets/skill/Magnum.gif',
     maxLevel:7,
     perLevel:3,
     cooldown:180,
@@ -77,6 +82,7 @@ export const SKILL_DB = {
     name:'Toughness',
     category:'Passive',
     element:'NEUTRAL',
+    icon:'assets/skill/Toughness.gif',
     maxLevel:5,
     perLevel:1,
     desc:'+10 Max HP per level.',
@@ -87,6 +93,7 @@ export const SKILL_DB = {
     name:'Haste',
     category:'Passive',
     element:'NEUTRAL',
+    icon:'assets/skill/Haste.gif',
     maxLevel:5,
     perLevel:1,
     desc:'-1 attack cooldown frame per level (min 6).',
@@ -97,6 +104,7 @@ export const SKILL_DB = {
     name:'Precision',
     category:'Passive',
     element:'NEUTRAL',
+    icon:'assets/skill/Precision.gif',
     maxLevel:5,
     perLevel:1,
     desc:'+2% critical chance per level.',
@@ -107,10 +115,22 @@ export const SKILL_DB = {
     name:'HP Regen',
     category:'Passive',
     element:'NEUTRAL',
+    icon:'assets/skill/HPRegen.gif',
     maxLevel:5,
     perLevel:3,
     desc:'Regenerate HP every 6s. Amount increases per level.',
     unlockLevel:4
+  },
+  DoubleAttack:{
+    key:'DoubleAttack',
+    name:'Double Attack',
+    category:'Passive',
+    element:'NEUTRAL',
+    icon:'assets/skill/DoubleAttack.gif',
+    maxLevel:5,
+    perLevel:1,
+    desc:'Chance to strike twice on a hit. Bonus hit shows bold yellow text.',
+    unlockLevel:5
   },
 	    Meteor: {
     key:'Meteor',
@@ -118,6 +138,7 @@ export const SKILL_DB = {
     type:'active',
     category:'Magic',
     element:'FIRE',
+    icon:'assets/skill/Meteor.gif',
 
     desc:'Call down a delayed meteor that explodes in an area. Higher level = larger radius and shorter delay.',
     maxLevel:5,
@@ -148,6 +169,30 @@ export const SKILL_DB = {
     delayPerLevel: 8,         // delay reduction per level
     baseDamageMultiplier: 3,  // scales with INT
     bonusDamagePerLevel: 4
+  },
+  Quagmire:{
+    key:'Quagmire',
+    name:'Quagmire',
+    category:'Magic',
+    element:'EARTH',
+    icon:'assets/skill/Quagmire.gif',
+    maxLevel:5,
+    perLevel:2,
+    cooldown:260,
+    desc:'Poisonous ground for 5s; damages over time and makes targets take more fire damage.',
+    unlockLevel:7
+  },
+  ArrowShower:{
+    key:'ArrowShower',
+    name:'Arrow Shower',
+    category:'Range',
+    element:'NEUTRAL',
+    icon:'assets/skill/ArrowShower.gif',
+    maxLevel:5,
+    perLevel:2,
+    cooldown:320,
+    desc:'Launch 5 arrows in a forward crescent. Long cooldown. Damage scales with DEX.',
+    unlockLevel:6
   },
 
 };

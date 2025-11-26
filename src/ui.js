@@ -12,6 +12,7 @@ const SLOT_LABEL = {
   accL: 'Accessory (L)',
   accR: 'Accessory (R)'
 };
+const itemSpriteCache = new Map();
 
 function describeItemShort(item){
   if (!item || !item.bonuses) return '';
@@ -49,15 +50,73 @@ function describeItemShort(item){
   return parts.join(', ');
 }
 
+function makeItemIcon(item){
+  const box = document.createElement('div');
+  box.style.width = '42px';
+  box.style.height = '42px';
+  box.style.borderRadius = '.45rem';
+  box.style.background = 'linear-gradient(180deg, #fefefe 0%, #e5edfb 100%)';
+  box.style.border = '1px dashed #b8cff1';
+  box.style.display = 'flex';
+  box.style.alignItems = 'center';
+  box.style.justifyContent = 'center';
+  box.style.fontSize = '.7rem';
+  box.style.color = '#6b7280';
+
+  const src = item?.sprite;
+  if (src) {
+    let cached = itemSpriteCache.get(src);
+    if (!cached) {
+      cached = new Image();
+      cached.src = src;
+      itemSpriteCache.set(src, cached);
+    }
+    const img = cached.cloneNode();
+    img.style.maxWidth = '36px';
+    img.style.maxHeight = '36px';
+    img.style.objectFit = 'contain';
+    box.appendChild(img);
+  } else {
+    box.textContent = 'Icon';
+  }
+  return box;
+}
+
+function showGoldChange(buttonEl, amount){
+  if (!buttonEl || !document || !document.body) return;
+  const toast = document.createElement('div');
+  const sign = amount >= 0 ? '+' : '-';
+  toast.textContent = `${sign}${Math.abs(amount)}g`;
+  const rect = buttonEl.getBoundingClientRect();
+  toast.style.position = 'fixed';
+  toast.style.left = `${rect.left + rect.width / 2}px`;
+  toast.style.top = `${rect.top - 8}px`;
+  toast.style.transform = 'translate(-50%, 0)';
+  toast.style.fontSize = '.75rem';
+  toast.style.fontWeight = '700';
+  toast.style.color = amount >= 0 ? '#16a34a' : '#b91c1c';
+  toast.style.opacity = '1';
+  toast.style.transition = 'all 1.6s ease-out';
+  toast.style.pointerEvents = 'none';
+  toast.style.zIndex = '9999';
+  document.body.appendChild(toast);
+  requestAnimationFrame(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translate(-50%, -22px)';
+  });
+  setTimeout(() => toast.remove(), 1700);
+}
+
 // Map a skill to one of the UI categories
 function getSkillCategoryTab(key, skill){
   const cat = (skill.category || '').toLowerCase();
   if (cat === 'passive') return 'Passive';
   if (cat === 'magic') return 'Magic';
+  if (cat === 'range') return 'Range';
 
   // Anything else is "Physical" – divide manually into Melee / Range
   const k = key.toLowerCase();
-  if (k === 'arrow') return 'Range';
+  if (k === 'arrow' || k === 'arrowshower') return 'Range';
   // treat Bash / Magnum as melee
   if (k === 'bash' || k === 'magnum') return 'Melee';
 
@@ -758,6 +817,7 @@ export function makeOverlay(doc, player, onClose, opts = {}){
   const SKILL_TABS = ['All','Magic','Melee','Range','Passive'];
   let skillTab = 'All';
   const skillTabButtons = {};
+  let hideLocked = false;
 
   function setSkillTab(tab){
     skillTab = tab;
@@ -798,6 +858,32 @@ export function makeOverlay(doc, player, onClose, opts = {}){
   skillList.style.maxHeight = listMaxHeight;
   skillList.style.overflowY = 'auto';
   skillsCard.appendChild(skillList);
+
+  // Hide locked toggle
+  const hideLockedRow = doc.createElement('label');
+  hideLockedRow.style.display = 'flex';
+  hideLockedRow.style.alignItems = 'center';
+  hideLockedRow.style.gap = '.4rem';
+  hideLockedRow.style.fontSize = '.76rem';
+  hideLockedRow.style.marginTop = '.1rem';
+  hideLockedRow.style.cursor = 'pointer';
+
+  const hideLockedInput = doc.createElement('input');
+  hideLockedInput.type = 'checkbox';
+  hideLockedInput.checked = hideLocked;
+  hideLockedInput.style.width = '1rem';
+  hideLockedInput.style.height = '1rem';
+  hideLockedInput.onchange = () => {
+    hideLocked = !!hideLockedInput.checked;
+    renderSkills();
+  };
+
+  const hideLockedLabel = doc.createElement('span');
+  hideLockedLabel.textContent = 'Hide locked skills';
+
+  hideLockedRow.appendChild(hideLockedInput);
+  hideLockedRow.appendChild(hideLockedLabel);
+  skillsCard.appendChild(hideLockedRow);
 
   // ==== RIGHT: shop / inventory ====
   const rightCol = doc.createElement('div');
@@ -964,12 +1050,91 @@ export function makeOverlay(doc, player, onClose, opts = {}){
   invList.style.flex = '1 1 auto';
   invList.style.maxHeight = isMobile ? '48vh' : '400px';
   invList.style.overflowY = 'auto';
+  const ITEM_FILTERS = ['All','Headgear','Armor','Weapon','Shield','Garment','Shoes','Accessory','Other'];
+  let activeItemFilters = new Set(['All']);
+
+  function createItemFilterBar(onChanged){
+    const bar = doc.createElement('div');
+    bar.style.position = 'relative';
+    bar.style.display = 'inline-flex';
+    bar.style.marginBottom = '.4rem';
+    bar.style.fontSize = '.75rem';
+
+    const filterBtn = doc.createElement('button');
+    filterBtn.textContent = 'Filter Items';
+    filterBtn.style.borderRadius = '999px';
+    filterBtn.style.border = '1px solid rgba(148,163,184,0.7)';
+    filterBtn.style.padding = '.25rem .7rem';
+    filterBtn.style.fontSize = '.78rem';
+    filterBtn.style.cursor = 'pointer';
+    filterBtn.style.background = 'transparent';
+    filterBtn.style.color = '#1b2d4b';
+    bar.appendChild(filterBtn);
+
+    const dropdown = doc.createElement('div');
+    dropdown.style.position = 'absolute';
+    dropdown.style.top = '110%';
+    dropdown.style.left = '0';
+    dropdown.style.minWidth = '180px';
+    dropdown.style.background = '#fff';
+    dropdown.style.border = '1px solid #b8cff1';
+    dropdown.style.borderRadius = '.65rem';
+    dropdown.style.boxShadow = '0 10px 26px rgba(21,44,90,0.18)';
+    dropdown.style.padding = '.35rem .55rem';
+    dropdown.style.display = 'none';
+    dropdown.style.zIndex = '10';
+    dropdown.style.color = '#1b2d4b';
+    dropdown.style.fontSize = '.78rem';
+
+    ITEM_FILTERS.forEach((cat, idx) => {
+      const row = doc.createElement('label');
+      row.style.display = 'flex';
+      row.style.alignItems = 'center';
+      row.style.gap = '.4rem';
+      row.style.padding = '.15rem 0';
+      const cb = doc.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = activeItemFilters.has(cat);
+      cb.onchange = () => {
+        // Only one category active at a time
+        activeItemFilters = new Set([cat]);
+        dropdown.querySelectorAll('input[type=checkbox]').forEach((el, i) => {
+          el.checked = i === idx;
+        });
+        dropdown.style.display = 'block'; // keep open on toggle
+        if (onChanged) onChanged();
+      };
+      const span = doc.createElement('span');
+      span.textContent = cat;
+      row.appendChild(cb);
+      row.appendChild(span);
+      dropdown.appendChild(row);
+    });
+
+    filterBtn.onclick = (e) => {
+      e.stopPropagation();
+      dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+    };
+
+    doc.addEventListener('click', (e) => {
+      if (!dropdown.contains(e.target) && e.target !== filterBtn) {
+        dropdown.style.display = 'none';
+      }
+    });
+
+    bar.appendChild(dropdown);
+    return bar;
+  }
 
   function renderShopBuy(){
     shopList.innerHTML = '';
 
     // add mode row
     shopList.appendChild(shopModeRow);
+    shopList.appendChild(createItemFilterBar(() => {
+      if (shopMode === 'buy') renderShopBuy(); else renderShopSell();
+      renderInventoryPanel();
+    }));
 
     const listBox = doc.createElement('div');
     listBox.style.display = 'flex';
@@ -980,15 +1145,32 @@ export function makeOverlay(doc, player, onClose, opts = {}){
     // ITEMS_DB is an array
     ITEMS_DB.forEach((item) => {
       if (!item) return;
+      const rarity = item.rarity || 'Common';
+      if (item.shopAvailable === false) return;
+      if (!['Common','Uncommon'].includes(rarity)) return;
+      const slot = item.slot || '';
+      const cat = slot === 'head' ? 'Headgear'
+        : slot === 'armor' ? 'Armor'
+        : slot === 'weapon' ? 'Weapon'
+        : slot === 'shield' ? 'Shield'
+        : slot === 'garment' ? 'Garment'
+        : slot === 'shoes' ? 'Shoes'
+        : slot === 'accL' || slot === 'accR' ? 'Accessory'
+        : 'Other';
+      const active = activeItemFilters.has('All') ? true : activeItemFilters.has(cat);
+      if (!active) return;
       const row = doc.createElement('div');
       row.style.display = 'grid';
-      row.style.gridTemplateColumns = 'minmax(0,2.1fr) auto auto';
-      row.style.gap = '.35rem';
+      row.style.gridTemplateColumns = '46px minmax(0,2.1fr) auto auto';
+      row.style.columnGap = '.5rem';
       row.style.alignItems = 'center';
-      row.style.padding = '.3rem .35rem';
-      row.style.borderRadius = '.6rem';
+      row.style.padding = '.45rem .5rem';
+      row.style.borderRadius = '.65rem';
       row.style.background = 'rgba(255,255,255,0.95)';
       row.style.border = '1px solid #b8cff1';
+      row.style.minHeight = '72px';
+
+      row.appendChild(makeItemIcon(item));
 
       const main = doc.createElement('div');
       main.style.display = 'flex';
@@ -1005,14 +1187,20 @@ export function makeOverlay(doc, player, onClose, opts = {}){
       const name = doc.createElement('span');
       name.textContent = item.name;
       name.style.fontSize = '.8rem';
-      name.style.fontWeight = '500';
+      name.style.fontWeight = '600';
+      name.style.color =
+        rarity === 'Uncommon' ? '#0f766e' :
+        rarity === 'Rare' ? '#2563eb' :
+        rarity === 'Legendary' ? '#b45309' :
+        rarity === 'Unique' ? '#9d174d' :
+        '#1f2937';
       top.appendChild(name);
 
       const priceSpan = doc.createElement('span');
       priceSpan.style.fontSize = '.78rem';
       priceSpan.style.opacity = '0.9';
       const price = item.price || 100;
-      priceSpan.textContent = `Buy: ${price} gold`;
+      priceSpan.textContent = `${price}g`;
       top.appendChild(priceSpan);
 
       const typeSpan = doc.createElement('span');
@@ -1042,6 +1230,7 @@ export function makeOverlay(doc, player, onClose, opts = {}){
       btn.style.cursor = 'pointer';
       btn.style.background = 'linear-gradient(180deg, #fefefe 0%, #dbe9fb 100%)';
       btn.style.color = '#1b2d4b';
+      btn.style.position = 'relative';
 
       btn.onclick = (ev) => {
         ev.stopPropagation();
@@ -1052,11 +1241,11 @@ export function makeOverlay(doc, player, onClose, opts = {}){
         if (!player.inventory) player.inventory = [];
         // push a shallow copy so we don't mutate DB entry
         player.inventory.push({ ...item });
-        updateAll();
+        showGoldChange(btn, -cost);
+        setTimeout(() => updateAll(), 10);
       };
 
       btnBox.appendChild(btn);
-      row.onclick = () => btn.click();
 
       listBox.appendChild(row);
     });
@@ -1065,6 +1254,10 @@ export function makeOverlay(doc, player, onClose, opts = {}){
   function renderShopSell(){
     shopList.innerHTML = '';
     shopList.appendChild(shopModeRow);
+    shopList.appendChild(createItemFilterBar(() => {
+      if (shopMode === 'buy') renderShopBuy(); else renderShopSell();
+      renderInventoryPanel();
+    }));
 
     const listBox = doc.createElement('div');
     listBox.style.display = 'flex';
@@ -1082,15 +1275,29 @@ export function makeOverlay(doc, player, onClose, opts = {}){
     }
 
     player.inventory.forEach((it, idx) => {
+      const slot = it.slot || '';
+      const cat = slot === 'head' ? 'Headgear'
+        : slot === 'armor' ? 'Armor'
+        : slot === 'weapon' ? 'Weapon'
+        : slot === 'shield' ? 'Shield'
+        : slot === 'garment' ? 'Garment'
+        : slot === 'shoes' ? 'Shoes'
+        : slot === 'accL' || slot === 'accR' ? 'Accessory'
+        : 'Other';
+      const active = activeItemFilters.has('All') ? true : activeItemFilters.has(cat);
+      if (!active) return;
       const row = doc.createElement('div');
       row.style.display = 'grid';
-      row.style.gridTemplateColumns = 'minmax(0,2.1fr) auto auto';
-      row.style.gap = '.35rem';
+      row.style.gridTemplateColumns = '46px minmax(0,2.1fr) auto auto';
+      row.style.columnGap = '.5rem';
       row.style.alignItems = 'center';
-      row.style.padding = '.3rem .35rem';
-      row.style.borderRadius = '.6rem';
+      row.style.padding = '.45rem .5rem';
+      row.style.borderRadius = '.65rem';
       row.style.background = 'rgba(255,255,255,0.95)';
       row.style.border = '1px solid #b8cff1';
+      row.style.minHeight = '72px';
+
+      row.appendChild(makeItemIcon(it));
 
       const main = doc.createElement('div');
       main.style.display = 'flex';
@@ -1104,10 +1311,17 @@ export function makeOverlay(doc, player, onClose, opts = {}){
       top.style.justifyContent = 'space-between';
       main.appendChild(top);
 
+      const rarity = it.rarity || 'Common';
       const name = doc.createElement('span');
       name.textContent = it.name || 'Item';
       name.style.fontSize = '.8rem';
-      name.style.fontWeight = '500';
+      name.style.fontWeight = '600';
+      name.style.color =
+        rarity === 'Uncommon' ? '#0f766e' :
+        rarity === 'Rare' ? '#2563eb' :
+        rarity === 'Legendary' ? '#b45309' :
+        rarity === 'Unique' ? '#9d174d' :
+        '#1f2937';
       top.appendChild(name);
 
       const base = it.price || 100;
@@ -1115,7 +1329,7 @@ export function makeOverlay(doc, player, onClose, opts = {}){
       const priceSpan = doc.createElement('span');
       priceSpan.style.fontSize = '.78rem';
       priceSpan.style.opacity = '0.9';
-      priceSpan.textContent = `Sell: ${sellPrice} gold`;
+      priceSpan.textContent = `${sellPrice}g`;
       top.appendChild(priceSpan);
 
       const typeSpan = doc.createElement('span');
@@ -1145,17 +1359,18 @@ export function makeOverlay(doc, player, onClose, opts = {}){
       btn.style.cursor = 'pointer';
       btn.style.background = 'linear-gradient(180deg, #fefefe 0%, #dbe9fb 100%)';
       btn.style.color = '#1b2d4b';
+      btn.style.position = 'relative';
 
       btn.onclick = (ev) => {
         ev.stopPropagation();
         if (!player.inventory || !player.inventory[idx]) return;
         player.inventory.splice(idx, 1);
         player.gold = (player.gold || 0) + sellPrice;
-        updateAll();
+        showGoldChange(btn, sellPrice);
+        setTimeout(() => updateAll(), 10);
       };
 
       btnBox.appendChild(btn);
-      row.onclick = () => btn.click();
 
       listBox.appendChild(row);
     });
@@ -1163,6 +1378,11 @@ export function makeOverlay(doc, player, onClose, opts = {}){
 
   function renderInventoryPanel(){
     invList.innerHTML = '';
+
+    invList.appendChild(createItemFilterBar(() => {
+      renderInventoryPanel();
+      if (shopMode === 'buy') renderShopBuy(); else renderShopSell();
+    }));
 
     if (!player.inventory || player.inventory.length === 0){
       const empty = doc.createElement('div');
@@ -1174,16 +1394,30 @@ export function makeOverlay(doc, player, onClose, opts = {}){
     }
 
     player.inventory.forEach((it, idx) => {
+      const slot = it.slot || '';
+      const cat = slot === 'head' ? 'Headgear'
+        : slot === 'armor' ? 'Armor'
+        : slot === 'weapon' ? 'Weapon'
+        : slot === 'shield' ? 'Shield'
+        : slot === 'garment' ? 'Garment'
+        : slot === 'shoes' ? 'Shoes'
+        : slot === 'accL' || slot === 'accR' ? 'Accessory'
+        : 'Other';
+      const active = activeItemFilters.has('All') ? true : activeItemFilters.has(cat);
+      if (!active) return;
       const row = doc.createElement('div');
       row.style.display = 'grid';
-      row.style.gridTemplateColumns = 'minmax(0,2.1fr) auto auto';
-      row.style.gap = '.35rem';
+      row.style.gridTemplateColumns = '46px minmax(0,2.1fr) auto auto';
+      row.style.columnGap = '.5rem';
       row.style.alignItems = 'center';
-      row.style.padding = '.3rem .35rem';
-      row.style.borderRadius = '.6rem';
+      row.style.padding = '.45rem .5rem';
+      row.style.borderRadius = '.65rem';
       row.style.background = 'rgba(255,255,255,0.95)';
       row.style.border = '1px solid #b8cff1';
+      row.style.minHeight = '72px';
       invList.appendChild(row);
+
+      row.appendChild(makeItemIcon(it));
 
       const main = doc.createElement('div');
       main.style.display = 'flex';
@@ -1197,10 +1431,17 @@ export function makeOverlay(doc, player, onClose, opts = {}){
       top.style.justifyContent = 'space-between';
       main.appendChild(top);
 
+      const rarity = it.rarity || 'Common';
       const name = doc.createElement('span');
       name.textContent = it.name || 'Item';
       name.style.fontSize = '.8rem';
-      name.style.fontWeight = '500';
+      name.style.fontWeight = '600';
+      name.style.color =
+        rarity === 'Uncommon' ? '#0f766e' :
+        rarity === 'Rare' ? '#2563eb' :
+        rarity === 'Legendary' ? '#b45309' :
+        rarity === 'Unique' ? '#9d174d' :
+        '#1f2937';
       top.appendChild(name);
 
       const slotSpan = doc.createElement('span');
@@ -1323,34 +1564,43 @@ export function makeOverlay(doc, player, onClose, opts = {}){
       const tabCat = getSkillCategoryTab(key, skill);
       if (skillTab !== 'All' && tabCat !== skillTab) return;
 
+      const unlocked = !!player.unlocks?.[key];
+      if (hideLocked && !unlocked) return;
+
       const row = doc.createElement('div');
       row.style.display = 'grid';
-      row.style.gridTemplateColumns = 'minmax(0,2.4fr) auto auto';
-      row.style.gap = '.35rem';
-      row.style.alignItems = 'center';
-      row.style.padding = '.35rem .45rem';
-      row.style.borderRadius = '.45rem';
-      row.style.background = 'rgba(255,255,255,0.92)';
+      row.style.gridTemplateColumns = '46px minmax(0,1fr) 70px';
+      row.style.columnGap = '.4rem';
+      row.style.rowGap = '.25rem';
+      row.style.alignItems = 'start';
+      row.style.padding = '.6rem .65rem';
+      row.style.borderRadius = '.65rem';
+      row.style.background = 'rgba(255,255,255,0.95)';
       row.style.border = '1px solid #b8cff1';
-      row.style.marginBottom = '.25rem';
+      row.style.marginBottom = '.3rem';
+
+      const iconBox = makeItemIcon({ sprite: skill.icon || 'assets/skill/basic.gif' });
+      iconBox.style.width = '44px';
+      iconBox.style.height = '44px';
+      row.appendChild(iconBox);
 
       const main = doc.createElement('div');
       main.style.display = 'flex';
       main.style.flexDirection = 'column';
-      main.style.gap = '.1rem';
+      main.style.gap = '.12rem';
       row.appendChild(main);
 
-      const top = doc.createElement('div');
-      top.style.display = 'flex';
-      top.style.alignItems = 'center';
-      top.style.gap = '.4rem';
-      main.appendChild(top);
+      const header = document.createElement('div');
+      header.style.display = 'flex';
+      header.style.alignItems = 'center';
+      header.style.gap = '.4rem';
+      main.appendChild(header);
 
-      const nameEl2 = doc.createElement('span');
-      nameEl2.textContent = skill.name;
-      nameEl2.style.fontWeight = '600';
-      nameEl2.style.fontSize = '.82rem';
-      top.appendChild(nameEl2);
+      const nameEl = document.createElement('span');
+      nameEl.textContent = skill.name;
+      nameEl.style.fontWeight = '700';
+      nameEl.style.fontSize = '.94rem';
+      header.appendChild(nameEl);
 
       const baseLevel = player.skillLevel?.[key] || 0;
       const bonusLevel =
@@ -1359,54 +1609,73 @@ export function makeOverlay(doc, player, onClose, opts = {}){
           : 0;
       const maxLv = skill.maxLevel || 5;
 
-      const lvlEl = doc.createElement('span');
+      const lvlEl = document.createElement('span');
       const bonusTxt = bonusLevel > 0 ? ` (+${bonusLevel})` : '';
       lvlEl.textContent = `Lv ${baseLevel}${bonusTxt}/${maxLv}`;
-      lvlEl.style.fontSize = '.75rem';
-      lvlEl.style.opacity = '.85';
-      top.appendChild(lvlEl);
+      lvlEl.style.fontSize = '.82rem';
+      lvlEl.style.opacity = '.9';
+      lvlEl.style.marginLeft = 'auto';
+      header.appendChild(lvlEl);
 
-      const descEl = doc.createElement('div');
+      const metaRow = document.createElement('div');
+      metaRow.style.display = 'flex';
+      metaRow.style.alignItems = 'center';
+      metaRow.style.gap = '.5rem';
+      metaRow.style.fontSize = '.76rem';
+      main.appendChild(metaRow);
+
+      const elem = skill.element || 'NEUTRAL';
+      const elemTag = document.createElement('span');
+      elemTag.textContent = elem;
+      elemTag.style.fontWeight = '700';
+      elemTag.style.padding = '.06rem .55rem';
+      elemTag.style.borderRadius = '999px';
+      elemTag.style.background = getElementColor(elem) + '20';
+      elemTag.style.color = getElementColor(elem);
+      metaRow.appendChild(elemTag);
+
+      const catTag = document.createElement('span');
+      catTag.textContent = skill.category || 'Active';
+      catTag.style.opacity = '.82';
+      metaRow.appendChild(catTag);
+
+      const descEl = document.createElement('div');
       descEl.textContent = skill.desc || skill.description || '';
-      descEl.style.fontSize = '.74rem';
-      descEl.style.opacity = '.85';
+      descEl.style.fontSize = '.75rem';
+      descEl.style.opacity = '.9';
+      descEl.style.whiteSpace = 'normal';
+      descEl.style.wordBreak = 'break-word';
+      descEl.style.lineHeight = '1.4';
       main.appendChild(descEl);
 
-      // per-level character level requirements
       const nextLevel = Math.min(baseLevel + 1, maxLv);
       let requiredCharLevel;
       const levelReqs = skill.levelReqs;
-
-      if (levelReqs){
+      if (levelReqs && !player.adminMode){
         if (Array.isArray(levelReqs)){
           requiredCharLevel = levelReqs[nextLevel - 1];
         } else if (typeof levelReqs === 'object'){
           requiredCharLevel = levelReqs[nextLevel];
         }
       }
-
       if (requiredCharLevel == null){
         requiredCharLevel = skill.unlockLevel || skill.requiredLevel || 1;
       }
 
-      // simple prereq list
       let prereqList =
         skill.prereq ||
         skill.prereqs ||
         skill.prerequisites ||
         skill.requires ||
         null;
-
       if (prereqList && !Array.isArray(prereqList)){
         prereqList = [prereqList];
       }
 
       const reqParts = [];
-
       if (requiredCharLevel > 1 && baseLevel < maxLv){
         reqParts.push(`Requires Lv ${requiredCharLevel} for next level`);
       }
-
       if (prereqList && prereqList.length){
         const names = prereqList.map((k) => {
           const s = SKILL_DB[k];
@@ -1414,7 +1683,6 @@ export function makeOverlay(doc, player, onClose, opts = {}){
         });
         reqParts.push(`Prerequisite: ${names.join(', ')}`);
       }
-
       if (skill.prereqSkills){
         const skillReqText = [];
         Object.entries(skill.prereqSkills).forEach(([sKey, minLv]) => {
@@ -1427,60 +1695,46 @@ export function makeOverlay(doc, player, onClose, opts = {}){
         }
       }
 
-      if (reqParts.length){
-        const reqEl = doc.createElement('div');
-        reqEl.textContent = reqParts.join(' • ');
-        reqEl.style.fontSize = '.68rem';
-        reqEl.style.opacity = '.75';
-        main.appendChild(reqEl);
-      }
-
-      // cost
-      const cost = skill.cost || 1;
-      const costEl = doc.createElement('div');
-      costEl.textContent = `Cost: ${cost} point(s)`;
-      costEl.style.fontSize = '.7rem';
-      costEl.style.opacity = '.8';
-      main.appendChild(costEl);
-
-      const typeEl = doc.createElement('div');
-      typeEl.textContent = (skill.category || 'Active');
-      typeEl.style.fontSize = '.7rem';
-      typeEl.style.opacity = '.75';
-      row.appendChild(typeEl);
+      const reqRow = document.createElement('div');
+      reqRow.style.fontSize = '.68rem';
+      reqRow.style.opacity = '.78';
+      reqRow.style.whiteSpace = 'normal';
+      reqRow.style.wordBreak = 'break-word';
+      reqRow.textContent = reqParts.join(' • ');
+      main.appendChild(reqRow);
 
       const btnBox = doc.createElement('div');
       btnBox.style.display = 'flex';
       btnBox.style.justifyContent = 'flex-end';
+      btnBox.style.alignSelf = 'start';
+      btnBox.style.gridColumn = '3 / 4';
       row.appendChild(btnBox);
 
       const addBtn = doc.createElement('button');
       addBtn.textContent = '+';
-      addBtn.style.fontSize = isMobile ? '.95rem' : '.75rem';
-      addBtn.style.padding = isMobile ? '.3rem .6rem' : '.18rem .45rem';
-      addBtn.style.borderRadius = '.35rem';
+      addBtn.style.fontSize = isMobile ? '.95rem' : '.85rem';
+      addBtn.style.padding = isMobile ? '.35rem .75rem' : '.24rem .6rem';
+      addBtn.style.borderRadius = '.45rem';
       addBtn.style.border = '1px solid rgba(255,255,255,0.25)';
       addBtn.style.background = 'linear-gradient(180deg, #fefefe 0%, #dbe9fb 100%)';
       addBtn.style.color = '#1b2d4b';
 
+      const cost = skill.cost || 1;
       const pointsOk = (player.skillPoints || 0) >= cost;
       const notMaxed = baseLevel < maxLv;
       const levelOk = (player.level || 1) >= requiredCharLevel;
 
       let prereqOk = true;
-
-      if (prereqList && prereqList.length){
+      if (prereqList && prereqList.length && !player.adminMode){
         prereqOk = prereqList.every((k) => (player.skillLevel?.[k] || 0) > 0);
       }
-
-      if (skill.prereqSkills){
+      if (skill.prereqSkills && !player.adminMode){
         prereqOk = prereqOk && Object.entries(skill.prereqSkills).every(([sKey, minLv]) => {
           return (player.skillLevel?.[sKey] || 0) >= minLv;
         });
       }
 
-      const canLearn = pointsOk && notMaxed && levelOk && prereqOk;
-
+      const canLearn = pointsOk && notMaxed && (player.adminMode ? true : levelOk) && (player.adminMode ? true : prereqOk);
       addBtn.disabled = !canLearn;
       addBtn.style.opacity = canLearn ? '1' : '0.4';
       addBtn.style.cursor = canLearn ? 'pointer' : 'default';
@@ -1636,4 +1890,15 @@ export function makeOverlay(doc, player, onClose, opts = {}){
     close,
     setShopMode
   };
+}
+const ELEMENT_COLOR = {
+  FIRE:'#e34a4a',
+  WATER:'#4aa3e3',
+  WIND:'#4caf50',
+  EARTH:'#8b5a2b',
+  NEUTRAL:'#9ca3af'
+};
+
+function getElementColor(elem){
+  return ELEMENT_COLOR[elem] || '#9ca3af';
 }

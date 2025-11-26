@@ -1,22 +1,40 @@
 import { ELEMENT, MONSTER_COLOR, elementMod, PLAYER_BASE_HP, HP_PER_VIT } from './constants.js';
 
 export class DamageText {
-  constructor(x, y, amount, crit=false){
+  constructor(x, y, amount, crit=false, opts={}){
     this.x = x;
     this.y = y;
     this.amount = amount;
     this.life = 45;
     this.crit = crit;
+    this.variant = opts.variant || 'normal';
   }
   update(){
     this.y -= 0.4;
     this.life--;
   }
   draw(ctx){
-    ctx.font = this.crit ? "bold 16px ui-monospace" : "14px ui-monospace";
+    const isDouble = this.variant === 'double';
+    const isPoison = this.variant === 'poison';
+
+    let font = "14px ui-monospace";
+    let color = "#fff";
+    if (this.crit){
+      font = "bold 16px ui-monospace";
+      color = "#ff9800";
+    } else if (isDouble){
+      font = "bold 15px ui-monospace";
+      color = "#ffeb3b";
+    } else if (isPoison){
+      font = "13px ui-monospace";
+      color = "#9ae6b4";
+    }
+
+    ctx.font = font;
     ctx.textAlign = "center";
-    ctx.fillStyle = this.crit ? "#ffeb3b" : "#fff";
-    ctx.fillText(this.amount, this.x, this.y);
+    const text = this.crit ? `${this.amount}!` : this.amount;
+    ctx.fillStyle = color;
+    ctx.fillText(text, this.x, this.y);
   }
 }
 
@@ -295,6 +313,7 @@ export class Monster {
     this.level = tpl.level || 1;
     this.element = tpl.element || ELEMENT.NEUTRAL;
     this.color = tpl.color || MONSTER_COLOR[this.element] || '#eaeaea';
+    this.spriteDef = tpl.sprite || null;
 
     this.x = x;
     this.y = y;
@@ -364,6 +383,7 @@ export class Boss extends Monster {
     super(adaptedTpl, round, x, y);
 
     this.isBoss = true;
+    this.bossDrops = Array.isArray(tpl.bossDrops) ? [...tpl.bossDrops] : [];
 
     // Make bosses visually larger and much tankier
     this.r *= 1.6;
@@ -373,6 +393,40 @@ export class Boss extends Monster {
     // Bigger EXP payout for bosses
     const baseBossExp = tpl.exp ?? 30;
     this.expValue = Math.floor(baseBossExp * (1 + round * 0.5));
+
+    this.skillLoadout = Array.isArray(tpl.skills) && tpl.skills.length
+      ? tpl.skills.map((s) => ({ ...s }))
+      : [
+          { key:'Fireball', level:2 },
+          { key:'Bash', level:2 }
+        ];
+    this.skillCooldowns = {};
+    this.passives = {};
+    this.skillCooldownFactor = tpl.skillCooldownFactor || 1;
+    this.applyPassives();
+  }
+
+  applyPassives(){
+    this.passives = {};
+    this.skillLoadout.forEach(({ key, level = 1 }) => {
+      if (!key) return;
+      if (key === 'Toughness') {
+        this.passives.toughness = level;
+      } else if (key === 'Haste') {
+        this.passives.haste = level;
+      } else if (key === 'HPRegen') {
+        this.passives.hpRegen = level;
+      }
+    });
+
+    if (this.passives.toughness){
+      const bonusHp = this.passives.toughness * 10;
+      this.maxHp += bonusHp;
+      this.hp += bonusHp;
+    }
+    if (this.passives.haste){
+      this.attackCooldownMax = Math.max(20, this.attackCooldownMax - this.passives.haste * 3);
+    }
   }
 }
 
@@ -382,7 +436,11 @@ export class Boss extends Monster {
 export function applyDamageToMonster(mon, dmg, atkElement){
   const mElem = mon.element || ELEMENT.NEUTRAL;
   const mod = elementMod(mElem, atkElement);
-  const final = Math.max(1, Math.round(dmg * mod));
+  let modified = dmg * mod;
+  if (atkElement === ELEMENT.FIRE && mon.fireVulnTimer > 0){
+    modified *= 1 + (mon.fireVulnBonus || 0);
+  }
+  const final = Math.max(1, Math.round(modified));
   mon.hp -= final;
   if (mon.hp < 0) mon.hp = 0;
   return final;

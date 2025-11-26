@@ -77,7 +77,7 @@ export function castFireball(player, projectiles, nearestFn) {
   // ---- RANGE BEHAVIOR (DEX) ----
   // At low DEX, Fireball reaches only a bit beyond the visible area around the player.
   // Each point of DEX adds a modest amount of extra range.
-  const baseRange = 260; // short–mid range at DEX 0–1
+  const baseRange = 200; // shorter reach at low DEX
   const dex = player.stats.dex || 0;
   const life = computeProjectileLifeForDex(baseRange, speed, dex);
 
@@ -111,7 +111,7 @@ export function castArrow(player, projectiles, nearestFn) {
   // ---- RANGE BEHAVIOR (DEX) ----
   // Arrow has a slightly longer base range than Fireball, but still cannot
   // hit monsters at the very edge of the screen with only 1 DEX.
-  const baseRange = 320;
+  const baseRange = 240;
   const dex = player.stats.dex || 0;
   const life = computeProjectileLifeForDex(baseRange, speed, dex);
 
@@ -133,6 +133,49 @@ export function castArrow(player, projectiles, nearestFn) {
   proj.angle = angle;
 
   projectiles.push(proj);
+}
+
+// ======================================================
+//  ARROW SHOWER (5-ARROW CRESCENT)
+// ======================================================
+export function castArrowShower(player, projectiles, nearestFn) {
+  const target = nearestFn(player.x, player.y);
+  const fallbackAng = Math.atan2(player.dy || 0, player.dx || 1);
+  const baseAngle = target
+    ? Math.atan2(target.y - player.y, target.x - player.x)
+    : fallbackAng;
+
+  const speed = 7.2;
+  const dex = player.stats.dex || 0;
+  const life = computeProjectileLifeForDex(260, speed, dex);
+
+  const level = getEffectiveSkillLevel(player, 'ArrowShower');
+  let dmg = player.stats.dex * 1.4 + level * 2;
+  if (typeof player.addSkillBonusDamage === 'function') {
+    dmg = player.addSkillBonusDamage('ArrowShower', dmg);
+  }
+
+  const spread = Math.PI / 2.8; // wide crescent in front
+  const step = spread / 4;
+
+  for (let i = 0; i < 5; i++) {
+    const ang = baseAngle + (i - 2) * step;
+    const vx = Math.cos(ang) * speed;
+    const vy = Math.sin(ang) * speed;
+    const proj = new PlayerProjectile(
+      player.x,
+      player.y,
+      vx,
+      vy,
+      dmg,
+      'NEUTRAL',
+      '#c5e1ff',
+      life
+    );
+    proj.type = 'arrow';
+    proj.angle = ang;
+    projectiles.push(proj);
+  }
 }
 
 // ======================================================
@@ -317,4 +360,71 @@ export class MeteorStrike {
     const dist = Math.hypot(dx, dy);
     return dist < this.radius + m.r;
   }
+}
+
+// ======================================================
+//  QUAGMIRE (PERSISTENT DoT FIELD)
+// ======================================================
+export class QuagmireField {
+  constructor(x, y, radius, lifeFrames, tickDamage, fireVulnBonus = 0.1) {
+    this.x = x;
+    this.y = y;
+    this.radius = radius;
+    this.life = lifeFrames;
+    this.element = 'EARTH';
+    this.tickDamage = tickDamage;
+    this.fireVulnBonus = fireVulnBonus;
+    this.tickInterval = 20;
+    this.tickTimer = 0;
+  }
+
+  update(paused = false) {
+    if (!paused) {
+      this.life--;
+      this.tickTimer--;
+    }
+  }
+
+  isDone() {
+    return this.life <= 0;
+  }
+
+  shouldTick() {
+    return this.tickTimer <= 0;
+  }
+
+  resetTick() {
+    this.tickTimer = this.tickInterval;
+  }
+
+  contains(m) {
+    const dx = m.x - this.x;
+    const dy = m.y - this.y;
+    const dist = Math.hypot(dx, dy);
+    return dist < this.radius + m.r;
+  }
+}
+
+export function castQuagmire(player, quagmires, nearestFn) {
+  const level = getEffectiveSkillLevel(player, 'Quagmire');
+  if (level <= 0) return;
+
+  const target = nearestFn(player.x, player.y);
+  const fallbackX = player.x + (player.dx || 1) * 120;
+  const fallbackY = player.y + (player.dy || 0) * 60;
+  const cx = target ? target.x : fallbackX;
+  const cy = target ? target.y : fallbackY;
+
+  const baseRadius = 80;
+  const radius = baseRadius + (level - 1) * 8;
+  const tickDamage = player.stats.int * 0.5 + level * 2;
+  const fireVuln = 0.1 + (level - 1) * 0.05;
+
+  let dmg = tickDamage;
+  if (typeof player.addSkillBonusDamage === 'function') {
+    dmg = player.addSkillBonusDamage('Quagmire', dmg);
+  }
+
+  const field = new QuagmireField(cx, cy, radius, 300, dmg, fireVuln);
+  quagmires.push(field);
 }

@@ -2,17 +2,22 @@ import { WORLD } from './constants.js';
 import {
   Player,
   MonsterProjectile,
+  PlayerProjectile,
   DamageText,
   applyDamageToMonster,
-  BasicArc
+  BasicArc,
+  Boss
 } from './entities.js';
 import {
   castFireball,
   castArrow,
+  castArrowShower,
   castIceWave,
   castBash,
   castMagnum,
-	castMeteorStorm 
+	castMeteorStorm,
+  MeteorStrike,
+  castQuagmire
 } from './skills.js';
 import {
   spawnMonsterForRound,
@@ -21,6 +26,7 @@ import {
 } from './spawn.js';
 import { makeOverlay } from './ui.js';
 import { SKILL_DB } from './databases/skillDB.js';
+import { ITEMS_DB } from './databases/itemDB.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -35,11 +41,23 @@ const adminBtn = document.getElementById('adminBtn');
 // Title + options
 const titleScreen = document.getElementById('titleScreen');
 const titleStartBtn = document.getElementById('titleStartBtn');
+const titleRankingBtn = document.getElementById('titleRankingBtn');
 const titleOptionsBtn = document.getElementById('titleOptionsBtn');
 const optionsModal = document.getElementById('optionsModal');
 const optionsCloseBtn = document.getElementById('optionsCloseBtn');
 const adminToggle = document.getElementById('adminToggle');
+const genderMaleRadio = document.getElementById('genderMale');
+const genderFemaleRadio = document.getElementById('genderFemale');
+const genderPreview = document.getElementById('genderPreview');
+const genderPreviewCtx = genderPreview ? genderPreview.getContext('2d') : null;
 const joystick = createMobileJoystick(canvas);
+const rankingModal = document.getElementById('rankingModal');
+const rankingCloseBtn = document.getElementById('rankingCloseBtn');
+const rankingList = document.getElementById('rankingList');
+const nameModal = document.getElementById('nameModal');
+const nameInput = document.getElementById('nameInput');
+const nameSaveBtn = document.getElementById('nameSaveBtn');
+const nameCloseBtn = document.getElementById('nameCloseBtn');
 
 // ========= PLAYER SPRITE / ANIMATION =========
 const PLAYER_SHEET_ROWS = 10;
@@ -50,6 +68,21 @@ const PLAYER_SPRITE_ROWS = {
   death: [9]
 };
 const PLAYER_SPRITE_SCALE = 0.35;
+const GENDER_STORAGE_KEY = 'dungeonsiege_gender';
+let playerGender = 'male';
+const arrowSprite = { img: new Image(), ready: false };
+const chestSprite = { img: new Image(), ready: false, frameH: 0, frameW: 0 };
+const monsterSpriteCache = new Map();
+const ITEM_MAP = Object.fromEntries((ITEMS_DB || []).map((it) => [it.id, it]));
+const previewSprite = {
+  img: new Image(),
+  ready: false,
+  frameW: 0,
+  frameH: 0,
+  cols: 1,
+  frame: 0,
+  frameTimer: 0
+};
 
 const playerSprite = {
   img: new Image(),
@@ -71,7 +104,148 @@ playerSprite.img.onload = () => {
   playerSprite.frameW = playerSprite.img.width / playerSprite.cols;
   playerSprite.ready = true;
 };
-playerSprite.img.src = 'assets/player.png';
+
+function spritePathForGender(g) {
+  return g === 'female' ? 'assets/player_f.png' : 'assets/player.png';
+}
+
+function getMonsterSprite(def){
+  if (!def || !def.src) return null;
+  if (monsterSpriteCache.has(def.src)) return monsterSpriteCache.get(def.src);
+  const img = new Image();
+  const record = {
+    img,
+    ready:false,
+    rows:def.rows || 1,
+    cols:def.cols || 1,
+    rowMap:def.rowMap || {},
+    frameCounts:def.frameCounts || {}
+  };
+  img.onload = () => {
+    record.rows = def.rows || 1;
+    record.frameH = Math.round(img.height / record.rows);
+    record.cols = def.cols || 1;
+    record.frameW = Math.round(img.width / record.cols);
+    record.ready = true;
+  };
+  img.src = def.src;
+  monsterSpriteCache.set(def.src, record);
+  return record;
+}
+
+function updateMonsterAnimState(mon, moved, paused=false){
+  if (!mon) return;
+  if (!mon.anim) mon.anim = { frame:0, timer:0, state:'idle', facing:1 };
+
+  if (!paused && mon.attackAnimTimer > 0) {
+    mon.attackAnimTimer--;
+  }
+
+  const prevState = mon.anim.state;
+  if (mon.hp <= 0) {
+    mon.anim.state = 'death';
+  } else if (mon.attackAnimTimer > 0) {
+    mon.anim.state = mon.anim.facing >= 0 ? 'attackR' : 'attackL';
+  } else if (moved) {
+    mon.anim.state = 'move';
+  } else {
+    mon.anim.state = 'idle';
+  }
+  if (mon.anim.state !== prevState) {
+    mon.anim.frame = 0;
+    mon.anim.timer = 0;
+  }
+
+  mon.anim.timer = (mon.anim.timer || 0) + 1;
+  const sprite = getMonsterSprite(mon.spriteDef);
+  if (!sprite || !sprite.ready) return;
+  if (mon.anim.state === 'death') {
+    mon.anim.frame = 0;
+    mon.anim.timer = 0;
+    return;
+  }
+  const speed = mon.anim.state === 'idle' ? 12 : 8;
+  if (mon.anim.timer >= speed) {
+    mon.anim.timer = 0;
+    const rowIdx = sprite.rowMap?.[mon.anim.state] ?? 0;
+    const frameCountForState = sprite.frameCounts?.[mon.anim.state] || sprite.cols || 1;
+    const maxFrame = frameCountForState - 1;
+    if (rowIdx === (sprite.rowMap?.death ?? -1)) {
+      // death anim: stop at last frame
+      mon.anim.frame = Math.min(maxFrame, mon.anim.frame + 1);
+    } else {
+      mon.anim.frame = (mon.anim.frame + 1) % (maxFrame + 1);
+    }
+  }
+}
+
+function drawMonster(ctx, mon, moved, paused=false){
+  const sprite = getMonsterSprite(mon.spriteDef);
+  if (!sprite || !sprite.ready) {
+    ctx.beginPath();
+    ctx.arc(mon.x, mon.y, mon.r, 0, Math.PI * 2);
+    ctx.fillStyle = mon.color || '#fff';
+    ctx.fill();
+    return;
+  }
+  updateMonsterAnimState(mon, moved, paused);
+  const rowMap = sprite.rowMap || {};
+  const state = mon.anim?.state || 'idle';
+  const rowIdx = rowMap[state] ?? 0;
+  const sx = Math.floor((mon.anim?.frame || 0) * (sprite.frameW || 0));
+  const sy = Math.floor((rowIdx || 0) * (sprite.frameH || 0));
+  const dw = sprite.frameW || 32;
+  const dh = sprite.frameH || 32;
+  const flip = (mon.anim?.facing || 1) < 0;
+  ctx.save();
+  ctx.translate(mon.x, mon.y);
+  if (flip) ctx.scale(-1, 1);
+  ctx.drawImage(sprite.img, sx, sy, sprite.frameW, sprite.frameH, -dw/2, -dh/2, dw, dh);
+  ctx.restore();
+}
+
+arrowSprite.img.onload = () => {
+  arrowSprite.ready = true;
+};
+arrowSprite.img.src = 'assets/arrow01.png';
+
+chestSprite.img.onload = () => {
+  chestSprite.frameH = chestSprite.img.height / 2;
+  chestSprite.frameW = chestSprite.img.width;
+  chestSprite.ready = true;
+};
+chestSprite.img.src = 'assets/chest.png';
+
+previewSprite.img.onload = () => {
+  previewSprite.frameH = previewSprite.img.height / PLAYER_SHEET_ROWS;
+  const assumedSquare = previewSprite.frameH || 1;
+  previewSprite.cols = Math.max(1, Math.floor(previewSprite.img.width / assumedSquare));
+  previewSprite.frameW = previewSprite.img.width / previewSprite.cols;
+  previewSprite.ready = true;
+};
+
+function loadGenderFromStorage() {
+  try {
+    const stored = localStorage.getItem(GENDER_STORAGE_KEY);
+    if (stored === 'female' || stored === 'male') return stored;
+  } catch (e) { /* ignore */ }
+  return 'male';
+}
+
+function applyGender(g) {
+  playerGender = g === 'female' ? 'female' : 'male';
+  try {
+    localStorage.setItem(GENDER_STORAGE_KEY, playerGender);
+  } catch (e) { /* ignore */ }
+  playerSprite.ready = false;
+  playerSprite.img.src = spritePathForGender(playerGender);
+  previewSprite.ready = false;
+  previewSprite.img.src = spritePathForGender(playerGender);
+  if (genderMaleRadio) genderMaleRadio.checked = playerGender === 'male';
+  if (genderFemaleRadio) genderFemaleRadio.checked = playerGender === 'female';
+}
+
+applyGender(loadGenderFromStorage());
 
 // ========= GROUND TILE =========
 const ground = {
@@ -425,11 +599,207 @@ let adminModeEnabled = false; // toggled in options
 let gameStarted = false;      // true only after setup is valid
 let preGameSetup = false;     // true only during the initial allocation
 let gameLoopStarted = false;  // so we don't start loop twice
+let pendingLeaderboardLevel = null;
+let previewAnimStarted = false;
+let activeChest = null;
+
+const RARITY_COLOR = {
+  Common: '#1f2937',
+  Uncommon: '#0f766e',
+  Rare: '#2563eb',
+  Legendary: '#b45309',
+  Unique: '#9d174d'
+};
+const CHEST_REROLL_COST = 500;
+const SLOT_LABEL = {
+  head: 'Headgear',
+  armor: 'Armor',
+  weapon: 'Weapon',
+  shield: 'Shield',
+  garment: 'Garment',
+  shoes: 'Shoes',
+  accL: 'Accessory (L)',
+  accR: 'Accessory (R)'
+};
+
+function getItemById(id) {
+  return ITEM_MAP[id] || null;
+}
+
+function summarizeItem(item){
+  if (!item || !item.bonuses) return item?.desc || '';
+  const b = item.bonuses;
+  const parts = [];
+  if (b.maxHp) parts.push(`+${b.maxHp} HP`);
+  if (b.str) parts.push(`+${b.str} STR`);
+  if (b.agi) parts.push(`+${b.agi} AGI`);
+  if (b.vit) parts.push(`+${b.vit} VIT`);
+  if (b.int) parts.push(`+${b.int} INT`);
+  if (b.dex) parts.push(`+${b.dex} DEX`);
+  if (b.luck) parts.push(`+${b.luck} LUK`);
+  if (b.moveSpeed) parts.push(`+${Math.round(b.moveSpeed * 100)}% move speed`);
+  if (b.critChance) parts.push(`+${Math.round(b.critChance * 100)}% crit chance`);
+  if (b.critDamage) parts.push(`+${Math.round(b.critDamage * 100)}% crit damage`);
+  if (b.cooldownFlat) parts.push(`-${b.cooldownFlat} skill cooldown`);
+  if (b.skill){
+    for (const [k, v] of Object.entries(b.skill)){
+      const s = SKILL_DB[k];
+      const name = s ? s.name : k;
+      parts.push(`+${v} ${name} level`);
+    }
+  }
+  return item.desc || parts.join(', ');
+}
+
+function rarityTag(item) {
+  const r = item?.rarity || 'Common';
+  const color = RARITY_COLOR[r] || '#1f2937';
+  const span = document.createElement('span');
+  span.textContent = r;
+  span.style.fontSize = '.7rem';
+  span.style.fontWeight = '700';
+  span.style.color = color;
+  return span;
+}
+
+// ========= LEADERBOARD =========
+const LEADERBOARD_KEY = 'dungeonsiege_leaderboard_v1';
+
+function loadLeaderboard() {
+  try {
+    const raw = localStorage.getItem(LEADERBOARD_KEY);
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveLeaderboard(list) {
+  try {
+    localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(list));
+  } catch (e) {
+    // ignore storage errors (e.g., private mode)
+  }
+}
+
+function addLeaderboardEntry(name, level) {
+  const list = loadLeaderboard();
+  list.push({ name, level, ts: Date.now() });
+  list.sort((a, b) => {
+    if (b.level !== a.level) return b.level - a.level;
+    return (a.ts || 0) - (b.ts || 0);
+  });
+  saveLeaderboard(list.slice(0, 50));
+}
+
+function renderLeaderboard() {
+  if (!rankingList) return;
+  const list = loadLeaderboard();
+  rankingList.innerHTML = '';
+  if (!list.length) {
+    rankingList.textContent = 'No runs recorded yet. Play a game to add your first entry!';
+    return;
+  }
+  const ol = document.createElement('ol');
+  ol.style.paddingLeft = '1.2rem';
+  list.slice(0, 10).forEach((entry) => {
+    const li = document.createElement('li');
+    const date = entry.ts ? new Date(entry.ts).toLocaleDateString() : '';
+    li.textContent = `${entry.name} — Lv ${entry.level}${date ? ` (${date})` : ''}`;
+    ol.appendChild(li);
+  });
+  rankingList.appendChild(ol);
+}
+
+function openRankingModal() {
+  if (!rankingModal) return;
+  renderLeaderboard();
+  rankingModal.style.display = 'grid';
+}
+
+function closeRankingModal() {
+  if (rankingModal) rankingModal.style.display = 'none';
+}
+
+function openNameModal(level) {
+  pendingLeaderboardLevel = level;
+  if (!nameModal || !nameInput || !nameSaveBtn) {
+    // Fallback to prompt if modal is missing
+    const fallbackName = prompt('Enter your name for the leaderboard:', 'Hero') || 'Unknown Adventurer';
+    const clean = (fallbackName || '').trim() || 'Unknown Adventurer';
+    addLeaderboardEntry(clean, level);
+    renderLeaderboard();
+    showMsg(`YOU DIED — ${clean}'s run saved at Lv ${level}. Refresh to restart`, 5000);
+    return;
+  }
+  nameInput.value = 'Hero';
+  nameModal.style.display = 'grid';
+  setTimeout(() => nameInput && nameInput.focus(), 10);
+}
+
+function closeNameModal() {
+  if (nameModal) nameModal.style.display = 'none';
+}
+
+function submitNameModal(useInput=true) {
+  const level = pendingLeaderboardLevel || player.level || 1;
+  let name = 'Unknown Adventurer';
+  if (useInput && nameInput) {
+    name = (nameInput.value || '').trim() || 'Hero';
+  }
+  addLeaderboardEntry(name, level);
+  renderLeaderboard();
+  closeNameModal();
+  pendingLeaderboardLevel = null;
+  showMsg(`YOU DIED — ${name}'s run saved at Lv ${level}. Refresh to restart`, 5000);
+}
 
 function startGameLoop() {
   if (gameLoopStarted) return;
   gameLoopStarted = true;
   requestAnimationFrame(loop);
+}
+
+function stepGenderPreview() {
+  if (!genderPreviewCtx || !genderPreview) return;
+  requestAnimationFrame(stepGenderPreview);
+
+  // clear
+  genderPreviewCtx.clearRect(0, 0, genderPreview.width, genderPreview.height);
+
+  if (!previewSprite.ready) return;
+
+  previewSprite.frameTimer++;
+  if (previewSprite.frameTimer >= 10) {
+    previewSprite.frameTimer = 0;
+    previewSprite.frame = (previewSprite.frame + 1) % previewSprite.cols;
+  }
+
+  const idleRow = (PLAYER_SPRITE_ROWS.idle && PLAYER_SPRITE_ROWS.idle[0]) || 0;
+  const sx = previewSprite.frame * previewSprite.frameW;
+  const sy = idleRow * previewSprite.frameH;
+  const dw = previewSprite.frameW * PLAYER_SPRITE_SCALE;
+  const dh = previewSprite.frameH * PLAYER_SPRITE_SCALE;
+  const scale = Math.min(
+    (genderPreview.width - 4) / dw,
+    (genderPreview.height - 4) / dh
+  );
+
+  const drawW = dw * scale;
+  const drawH = dh * scale;
+
+  genderPreviewCtx.drawImage(
+    previewSprite.img,
+    sx,
+    sy,
+    previewSprite.frameW,
+    previewSprite.frameH,
+    (genderPreview.width - drawW) / 2,
+    (genderPreview.height - drawH) / 2,
+    drawW,
+    drawH
+  );
 }
 
 // ========= TITLE SCREEN / OPTIONS =========
@@ -438,6 +808,13 @@ titleOptionsBtn.onclick = () => {
   if (!optionsModal) return;
   optionsModal.style.display = 'grid';
 };
+
+if (titleRankingBtn) {
+  titleRankingBtn.onclick = () => {
+    if (optionsModal) optionsModal.style.display = 'none';
+    openRankingModal();
+  };
+}
 
 if (optionsCloseBtn) {
   optionsCloseBtn.onclick = () => {
@@ -474,9 +851,45 @@ if (adminBtn) {
   };
 }
 
+if (genderMaleRadio) {
+  genderMaleRadio.onclick = () => applyGender('male');
+}
+if (genderFemaleRadio) {
+  genderFemaleRadio.onclick = () => applyGender('female');
+}
+if (!previewAnimStarted && genderPreviewCtx) {
+  previewAnimStarted = true;
+  requestAnimationFrame(stepGenderPreview);
+}
+
+if (rankingCloseBtn) {
+  rankingCloseBtn.onclick = () => closeRankingModal();
+}
+
+if (rankingModal) {
+  rankingModal.addEventListener('click', (e) => {
+    if (e.target === rankingModal) closeRankingModal();
+  });
+}
+
+if (nameSaveBtn) {
+  nameSaveBtn.onclick = () => submitNameModal(true);
+}
+
+if (nameCloseBtn) {
+  nameCloseBtn.onclick = () => submitNameModal(false);
+}
+
+if (nameModal) {
+  nameModal.addEventListener('click', (e) => {
+    if (e.target === nameModal) submitNameModal(false);
+  });
+}
+
 // Called when "Start Game" is clicked on title screen
 titleStartBtn.onclick = () => {
   if (optionsModal) optionsModal.style.display = 'none';
+  closeRankingModal();
   // Hide title screen
   if (titleScreen) titleScreen.style.display = 'none';
 
@@ -485,8 +898,23 @@ titleStartBtn.onclick = () => {
   gameStarted = false;
 
   // Initial stat and skill points for setup
-  player.statPoints = 9;
-  player.skillPoints = 1;
+  if (adminModeEnabled) {
+    player.adminMode = true;
+    player.statPoints = 999;
+    player.skillPoints = 999;
+    player.gold = 999999;
+  } else {
+    player.adminMode = false;
+    player.statPoints = 9;
+    player.skillPoints = 1;
+    player.gold = INITIAL_GOLD;
+  }
+
+  // Re-apply gender selection on start
+  applyGender(loadGenderFromStorage());
+
+  // Reset stats to base values (no admin stat boost)
+  player.stats = { str:3, agi:3, int:3, dex:3, vit:3, luck:3 };
 
   // Ensure player is at Level 1 baseline
   player.level = 1;
@@ -520,6 +948,10 @@ window.addEventListener('keydown', (e) => {
 
 window.addEventListener('keyup', (e) => {
   keys[e.key] = false;
+
+  if (e.key === 'Enter' && nameModal && nameModal.style.display === 'grid') {
+    submitNameModal(true);
+  }
 });
 
 // ========= OVERLAY / PANELS =========
@@ -529,17 +961,13 @@ function handleOverlayClosed() {
 
   // If we are finishing the pre-game setup, enforce conditions
   if (preGameSetup && !gameStarted) {
-    const remainingStat = player.statPoints || 0;
-
     const activeSkills = ['Fireball', 'Bash', 'Arrow', 'Ice', 'Magnum'];
     const hasActiveSkill = activeSkills.some(
       (k) => getEffectiveSkillLevel(k) > 0
     );
 
-    if (remainingStat > 0 || !hasActiveSkill) {
-      alert(
-        'Before starting, spend all 9 stat points and choose at least one active skill (e.g., Fireball or Bash).'
-      );
+    if (!hasActiveSkill) {
+      alert('Before starting, choose at least one active skill (e.g., Fireball or Bash).');
       // Force the player back to the stats panel
       openOverlay('Stats');
       return;
@@ -568,20 +996,6 @@ function handleOverlayClosed() {
     return;
   }
 
-  // If we were in admin-mode panel, restore real point counters
-  if (player.adminMode) {
-    player.adminMode = false;
-    if (player._savedStatPoints !== undefined) {
-      player.statPoints = player._savedStatPoints;
-      delete player._savedStatPoints;
-    }
-    if (player._savedSkillPoints !== undefined) {
-      player.skillPoints = player._savedSkillPoints;
-      delete player._savedSkillPoints;
-    }
-    // Gold remains whatever you set in admin mode (for shop debugging)
-  }
-
   // For in-game windows (Character / Shop / Inventory) closed via X:
   // start a 3-second resume countdown.
   if (gameStarted && !preGameSetup && !gameOver) {
@@ -599,8 +1013,14 @@ function handleOverlayClosed() {
 
 
 
-const useMobileOverlay = window.innerWidth < 960;
-const overlay = makeOverlay(document, player, handleOverlayClosed, { forceMobile: useMobileOverlay });
+let overlay = null;
+function getOverlay() {
+  if (!overlay) {
+    const useMobileOverlay = window.innerWidth < 960;
+    overlay = makeOverlay(document, player, handleOverlayClosed, { forceMobile: useMobileOverlay });
+  }
+  return overlay;
+}
 
 statsBtn.onclick = () => {
   if (!gameOver && gameLoopStarted) openOverlay('Stats');
@@ -613,12 +1033,12 @@ function openOverlay(tab) {
     paused = true;
     pausedText.style.display = 'block';
   }
-  overlay.open(tab);
+  getOverlay().open(tab);
 }
 
 
 function closeOverlay() {
-  overlay.close();
+  if (overlay) overlay.close();
 }
 
 // Admin debug: uses same stats/skills UI but with separate point pool
@@ -628,23 +1048,10 @@ function openAdminPanel() {
 
   player.adminMode = true;
 
-  // Save real level-up points
-  player._savedStatPoints = player.statPoints;
-  player._savedSkillPoints = player.skillPoints;
-
-  // Let you tweak gold too
-  const currentGold = player.gold || 0;
-  const input = prompt('Set player gold for debug:', String(currentGold));
-  if (input !== null) {
-    const val = parseInt(input, 10);
-    if (!Number.isNaN(val)) {
-      player.gold = val;
-    }
-  }
-
-  // Give huge admin points just inside this panel
+  // Admin defaults: massive points and max gold, no prompts
   player.statPoints = 999;
   player.skillPoints = 999;
+  player.gold = 999999;
 
   openOverlay('Stats');
 }
@@ -770,6 +1177,214 @@ function openShopWithChoice() {
   document.body.appendChild(shopChoiceOverlay);
 }
 
+// --- Boss Chest UI ---
+let chestOverlay = null;
+
+function closeChestOverlay() {
+  if (chestOverlay) {
+    document.body.removeChild(chestOverlay);
+    chestOverlay = null;
+  }
+  activeChest = null;
+  if (gameStarted) {
+    paused = false;
+    pausedText.style.display = 'none';
+  }
+}
+
+function pickChestOptions(poolIds) {
+  const pool = poolIds
+    .map((id) => getItemById(id))
+    .filter(Boolean);
+  // fallback: rare+ items if pool empty
+  let choicesSource = pool;
+  if (!choicesSource.length) {
+    choicesSource = (ITEMS_DB || []).filter((it) =>
+      ['Rare','Legendary','Unique'].includes(it.rarity)
+    );
+  }
+  if (!choicesSource.length) return [];
+
+  const picks = [];
+  const used = new Set();
+  const maxPicks = Math.min(3, choicesSource.length);
+  while (picks.length < maxPicks) {
+    const idx = Math.floor(Math.random() * choicesSource.length);
+    if (used.has(idx)) continue;
+    used.add(idx);
+    picks.push(choicesSource[idx]);
+  }
+  return picks;
+}
+
+function openChestOverlay(chest) {
+  if (!chest) return;
+  chest.opened = true;
+  activeChest = chest;
+  if (gameStarted) {
+    paused = true;
+    pausedText.style.display = 'block';
+  }
+
+  if (chestOverlay) closeChestOverlay();
+
+  chestOverlay = document.createElement('div');
+  chestOverlay.style.position = 'fixed';
+  chestOverlay.style.inset = '0';
+  chestOverlay.style.display = 'flex';
+  chestOverlay.style.alignItems = 'center';
+  chestOverlay.style.justifyContent = 'center';
+  chestOverlay.style.background = 'rgba(14,39,86,0.32)';
+  chestOverlay.style.backdropFilter = 'blur(3px)';
+  chestOverlay.style.zIndex = '1400';
+
+  const panel = document.createElement('div');
+  panel.style.background = 'linear-gradient(180deg, #fefefe 0%, #e6f0ff 55%, #cfdef7 100%)';
+  panel.style.borderRadius = '1rem';
+  panel.style.border = '2px solid #7da8d9';
+  panel.style.padding = '1rem 1.2rem';
+  panel.style.width = 'min(720px, 94vw)';
+  panel.style.boxShadow = '0 24px 64px rgba(22, 41, 84, 0.4)';
+  panel.style.color = '#1b2d4b';
+  panel.style.fontFamily = "Trebuchet MS, 'Segoe UI', system-ui, -apple-system, sans-serif";
+  panel.onclick = (e) => e.stopPropagation();
+  chestOverlay.appendChild(panel);
+
+  const header = document.createElement('div');
+  header.style.display = 'flex';
+  header.style.alignItems = 'center';
+  header.style.justifyContent = 'space-between';
+  header.style.marginBottom = '.6rem';
+  const title = document.createElement('div');
+  title.textContent = 'Boss Chest';
+  title.style.fontSize = '1.05rem';
+  title.style.fontWeight = '700';
+  header.appendChild(title);
+
+  const reroll = document.createElement('button');
+  reroll.textContent = `Re-roll (${CHEST_REROLL_COST} gold)`;
+  reroll.style.borderRadius = '999px';
+  reroll.style.border = '1px solid #d1a85c';
+  reroll.style.background = 'linear-gradient(180deg, #fff9ea 0%, #f0dfad 100%)';
+  reroll.style.color = '#5c4108';
+  reroll.style.padding = '.35rem .75rem';
+  reroll.style.cursor = 'pointer';
+  reroll.onclick = () => {
+    if ((player.gold || 0) < CHEST_REROLL_COST) {
+      showMsg('Not enough gold to re-roll!', 1500);
+      return;
+    }
+    player.gold -= CHEST_REROLL_COST;
+    chest.options = pickChestOptions(chest.poolIds || []);
+    openChestOverlay(chest);
+  };
+  header.appendChild(reroll);
+  panel.appendChild(header);
+
+  const subtitle = document.createElement('div');
+  subtitle.textContent = 'Choose one reward';
+  subtitle.style.fontSize = '.85rem';
+  subtitle.style.opacity = '0.8';
+  subtitle.style.marginBottom = '.6rem';
+  panel.appendChild(subtitle);
+
+  const grid = document.createElement('div');
+  grid.style.display = 'grid';
+  grid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(200px, 1fr))';
+  grid.style.gap = '.6rem';
+  panel.appendChild(grid);
+
+  const options = chest.options && chest.options.length ? chest.options : pickChestOptions(chest.poolIds || []);
+  chest.options = options;
+
+  options.forEach((item) => {
+    const card = document.createElement('div');
+    card.style.display = 'grid';
+    card.style.gridTemplateRows = 'auto auto 1fr auto';
+    card.style.gap = '.3rem';
+    card.style.padding = '.65rem .7rem';
+    card.style.background = 'rgba(255,255,255,0.95)';
+    card.style.border = '1px solid #b8cff1';
+    card.style.borderRadius = '.65rem';
+    card.style.boxShadow = '0 8px 20px rgba(13,35,78,0.12)';
+
+    const rarityRow = document.createElement('div');
+    rarityRow.style.display = 'flex';
+    rarityRow.style.justifyContent = 'space-between';
+    rarityRow.style.alignItems = 'center';
+    rarityRow.appendChild(rarityTag(item));
+    const slotSpan = document.createElement('span');
+    slotSpan.textContent = item.slot ? (SLOT_LABEL[item.slot] || item.slot) : 'Item';
+    slotSpan.style.fontSize = '.72rem';
+    slotSpan.style.opacity = '0.8';
+    rarityRow.appendChild(slotSpan);
+    card.appendChild(rarityRow);
+
+    const name = document.createElement('div');
+    name.textContent = item.name;
+    name.style.fontWeight = '700';
+    name.style.fontSize = '.9rem';
+    card.appendChild(name);
+
+    const spriteBox = document.createElement('div');
+    spriteBox.style.height = '70px';
+    spriteBox.style.borderRadius = '.55rem';
+    spriteBox.style.background = 'linear-gradient(180deg, #fefefe 0%, #e5edfb 100%)';
+    spriteBox.style.border = '1px dashed #b8cff1';
+    spriteBox.style.display = 'flex';
+    spriteBox.style.alignItems = 'center';
+    spriteBox.style.justifyContent = 'center';
+    spriteBox.textContent = 'Item Sprite';
+    spriteBox.style.color = '#6b7280';
+    spriteBox.style.fontSize = '.75rem';
+    card.appendChild(spriteBox);
+
+    const desc = document.createElement('div');
+    desc.style.fontSize = '.76rem';
+    desc.style.opacity = '0.88';
+    desc.textContent = summarizeItem(item);
+    card.appendChild(desc);
+
+    const btn = document.createElement('button');
+    btn.textContent = 'Obtain';
+    btn.style.borderRadius = '0.65rem';
+    btn.style.border = '1px solid #7fa8d7';
+    btn.style.background = 'linear-gradient(180deg, #ffffff 0%, #d7e8ff 100%)';
+    btn.style.color = '#143165';
+    btn.style.padding = '.35rem .6rem';
+    btn.style.cursor = 'pointer';
+    btn.onclick = () => {
+      if (!player.inventory) player.inventory = [];
+      player.inventory.push({ ...item });
+      showMsg(`${item.name} acquired!`, 1800);
+      const idx = bossChests.indexOf(chest);
+      if (idx >= 0) bossChests.splice(idx, 1);
+      closeChestOverlay();
+    };
+    card.appendChild(btn);
+
+    grid.appendChild(card);
+  });
+
+  chestOverlay.addEventListener('click', (e) => {
+    if (e.target === chestOverlay) closeChestOverlay();
+  });
+
+  document.body.appendChild(chestOverlay);
+}
+
+function spawnBossChest(boss) {
+  const chest = {
+    x: boss.x,
+    y: boss.y,
+    r: 18,
+    poolIds: Array.isArray(boss?.bossDrops) ? boss.bossDrops.slice() : [],
+    options: null,
+    opened: false
+  };
+  bossChests.push(chest);
+  showMsg('A boss chest has appeared!', 2200);
+}
 // ========= OBSTACLES =========
 const obstacles = [];
 function addRandomObstacles(round, playerRef) {
@@ -810,12 +1425,15 @@ function circleRectCollision(cx, cy, r, rect) {
 // ========= GAME ARRAYS =========
 const monsters = [];
 const playerProjectiles = [];
+const bossProjectiles = [];
 const monsterProjectiles = [];
 const iceWaves = [];
 const bashWaves = [];
 const magnumWaves = [];
 const meleeArcs = [];
 const meteorStrikes = [];
+const quagmires = [];
+const bossChests = [];
 const damageTexts = [];
 const coins = [];
 
@@ -832,7 +1450,9 @@ let regenTimer = 360;
 function killsForRound(r) {
   const base = 8 + r * 5;              // ramps per round
   const lateRamp = 1 + Math.max(0, r - 5) * 0.15; // more kills later
-  return Math.round(base * lateRamp);
+  let need = Math.round(base * lateRamp);
+  if (player.adminMode) need = Math.max(1, Math.round(need * 0.5));
+  return need;
 }
 function maxMonstersForRound(r) {
   let base = 4 + r * 2;
@@ -844,6 +1464,100 @@ function spawnIntervalForRound(r) {
   if (r > 10) base -= (r - 10) * 3;
   if (base < 10) base = 10;
   return base;
+}
+
+function bossPseudoStats(m){
+  return {
+    str: m.attackDamage || 10,
+    agi: Math.round((m.moveSpeed || 1) * 10),
+    dex: Math.round((m.attackDamage || 10) * 0.8),
+    int: m.attackDamage || 10,
+    vit: Math.round((m.maxHp || 200) / 30),
+    luck: 0
+  };
+}
+
+function bossSkillDamage(m, skillKey, level){
+  const def = SKILL_DB[skillKey];
+  const stats = bossPseudoStats(m);
+  if (def?.baseDamage) {
+    try {
+      return def.baseDamage(stats, level);
+    } catch (e) {
+      return m.attackDamage || 12;
+    }
+  }
+  return (m.attackDamage || 12) + level * 2;
+}
+
+function bossCastSkill(key, boss, level){
+  const dmg = bossSkillDamage(boss, key, level);
+  const dx = player.x - boss.x;
+  const dy = player.y - boss.y;
+  const dist = Math.hypot(dx, dy) || 1;
+  const dirX = dx / dist;
+  const dirY = dy / dist;
+
+  if (key === 'Fireball') {
+    const speed = 5.0;
+    const vx = dirX * speed;
+    const vy = dirY * speed;
+    const life = 180;
+    bossProjectiles.push(new PlayerProjectile(boss.x, boss.y, vx, vy, dmg, 'FIRE', '#ff9800', life));
+  } else if (key === 'Arrow') {
+    const speed = 7.0;
+    const vx = dirX * speed;
+    const vy = dirY * speed;
+    const life = 180;
+    const proj = new PlayerProjectile(boss.x, boss.y, vx, vy, dmg, 'NEUTRAL', '#ffffff', life);
+    proj.type = 'arrow';
+    proj.angle = Math.atan2(vy, vx);
+    bossProjectiles.push(proj);
+  } else if (key === 'ArrowShower') {
+    const baseAngle = Math.atan2(dirY, dirX);
+    const spread = Math.PI / 2.8;
+    const step = spread / 4;
+    const speed = 6.5;
+    const life = 170;
+    for (let i = 0; i < 5; i++) {
+      const ang = baseAngle + (i - 2) * step;
+      const vx = Math.cos(ang) * speed;
+      const vy = Math.sin(ang) * speed;
+      const proj = new PlayerProjectile(
+        boss.x,
+        boss.y,
+        vx,
+        vy,
+        dmg,
+        'NEUTRAL',
+        '#c5e1ff',
+        life
+      );
+      proj.type = 'arrow';
+      proj.angle = ang;
+      bossProjectiles.push(proj);
+    }
+  } else if (key === 'Ice') {
+    const speed = 4.4;
+    const vx = dirX * speed;
+    const vy = dirY * speed;
+    const life = 160;
+    bossProjectiles.push(new PlayerProjectile(boss.x, boss.y, vx, vy, dmg, 'WATER', '#6cf', life));
+  } else if (key === 'Bash') {
+    if (dist <= boss.attackRange + 32) {
+      player.hp -= dmg;
+      player.x -= dirX * 3;
+      player.y -= dirY * 3;
+    }
+  } else if (key === 'Magnum') {
+    if (dist < 180) {
+      player.hp -= dmg;
+    }
+  } else if (key === 'Meteor') {
+    const radius = 80 + level * 8;
+    const delay = Math.max(30, 120 - level * 10);
+    meteorStrikes.push(new MeteorStrike(player.x, player.y, radius, delay, dmg));
+  }
 }
 
 // ========= MESSAGES / HUD =========
@@ -898,8 +1612,15 @@ function handleLevelUp() {
     unlock('Precision');
     unlock('HPRegen');
   }
-  if (L >= 5) unlock('Magnum');
-  if (L >= 6) unlock('Ice');
+  if (L >= 5) {
+    unlock('Magnum');
+    unlock('DoubleAttack');
+  }
+  if (L >= 6) {
+    unlock('Ice');
+    unlock('ArrowShower');
+  }
+  if (L >= 7) unlock('Quagmire');
   if (L >= 8) unlock('Meteor');
 
   openOverlay('Stats');
@@ -931,8 +1652,30 @@ function onMonsterKilled(mon) {
   }
 }
 
-function spawnDamageText(x, y, amount, crit = false) {
-  damageTexts.push(new DamageText(x, y, amount, crit));
+function spawnDamageText(x, y, amount, crit = false, opts) {
+  damageTexts.push(new DamageText(x, y, amount, crit, opts || {}));
+}
+
+function handleMonsterDeath(mon) {
+  if (mon.hp > 0 || mon.__dead) return;
+  mon.__dead = true;
+
+  if (mon.isBoss) {
+    spawnBossChest(mon);
+    bossMode = false;
+    bossEntity = null;
+    round++;
+    killsThisRound = 0;
+    resetObstaclesForRound(round, player);
+    showMsg(`Boss defeated! Round ${round} begins.`, 2500);
+  } else {
+    const idx = monsters.indexOf(mon);
+    if (idx >= 0) monsters.splice(idx, 1);
+    onMonsterKilled(mon);
+  }
+  player.gainExp(mon.expValue || 5, (leveled) => {
+    if (leveled) handleLevelUp();
+  });
 }
 
 function hitTarget(mon, rawDmg, elem) {
@@ -948,23 +1691,18 @@ function hitTarget(mon, rawDmg, elem) {
 
   const dealt = applyDamageToMonster(mon, dmg, elem);
   spawnDamageText(mon.x, mon.y - mon.r - 10, dealt, crit);
+  handleMonsterDeath(mon);
 
-  if (mon.hp <= 0) {
-    if (mon.isBoss) {
-      bossMode = false;
-      bossEntity = null;
-      round++;
-      killsThisRound = 0;
-      resetObstaclesForRound(round, player);
-      showMsg(`Boss defeated! Round ${round} begins.`, 2500);
-    } else {
-      const idx = monsters.indexOf(mon);
-      if (idx >= 0) monsters.splice(idx, 1);
-      onMonsterKilled(mon);
+  // Passive: Double Attack extra strike
+  const daLevel = player.getEffectiveSkillLevel('DoubleAttack');
+  if (mon.hp > 0 && daLevel > 0) {
+    let chance = 0.12 + (daLevel - 1) * 0.06;
+    if (chance > 0.5) chance = 0.5;
+    if (Math.random() < chance) {
+      const extra = applyDamageToMonster(mon, rawDmg, elem);
+      spawnDamageText(mon.x, mon.y - mon.r - 4, extra, false, { variant:'double' });
+      handleMonsterDeath(mon);
     }
-    player.gainExp(mon.expValue || 5, (leveled) => {
-      if (leveled) handleLevelUp();
-    });
   }
 }
 
@@ -1098,6 +1836,16 @@ function loop() {
     }
   }
 
+  // ----- CHEST INTERACTION -----
+  if (!overlayOpen && !chestOverlay) {
+    bossChests.forEach((chest) => {
+      const d = Math.hypot(chest.x - player.x, chest.y - player.y);
+      if (d < (chest.r || 18) + player.r + 6) {
+        openChestOverlay(chest);
+      }
+    });
+  }
+
 
   // ----- SKILL COOLDOWNS (tick every frame) -----
   if (!paused) {
@@ -1142,6 +1890,9 @@ function loop() {
         useSkill('Arrow', 40, () =>
           castArrow(player, playerProjectiles, nearestWithFacing)
         );
+        useSkill('ArrowShower', 320, () =>
+          castArrowShower(player, playerProjectiles, nearestWithFacing)
+        );
         useSkill('Ice', 120, () => {
           const t = nearestWithFacing(player.x, player.y);
           if (!t) return;
@@ -1159,6 +1910,9 @@ function loop() {
           castBash(player, bashWaves);
         });
         useSkill('Magnum', 180, () => castMagnum(player, magnumWaves));
+        useSkill('Quagmire', 260, () =>
+          castQuagmire(player, quagmires, nearestWithFacing)
+        );
 		  
 		  useSkill('Meteor', 240, () =>
         castMeteorStorm(player, meteorStrikes, nearestWithFacing)
@@ -1241,6 +1995,29 @@ function loop() {
     if (w.life <= 0) magnumWaves.splice(i, 1);
   }
 	
+  for (let i = quagmires.length - 1; i >= 0; i--) {
+    const field = quagmires[i];
+    field.update(paused);
+
+    if (!paused && field.shouldTick()) {
+      currentMonsters.forEach((m) => {
+        if (field.contains(m)) {
+          const dealt = applyDamageToMonster(m, field.tickDamage, field.element);
+          spawnDamageText(m.x, m.y - m.r - 8, dealt, false, { variant:'poison' });
+          m.fireVulnTimer = Math.max(m.fireVulnTimer || 0, 300);
+          m.fireVulnBonus = Math.max(m.fireVulnBonus || 0, field.fireVulnBonus || 0);
+          m.quagmireTimer = Math.max(m.quagmireTimer || 0, 300);
+          handleMonsterDeath(m);
+        }
+      });
+      field.resetTick();
+    }
+
+    if (field.isDone()) {
+      quagmires.splice(i, 1);
+    }
+  }
+	
 	  for (let i = meteorStrikes.length - 1; i >= 0; i--) {
     const s = meteorStrikes[i];
     s.update();
@@ -1259,6 +2036,78 @@ function loop() {
     }
   }
 
+
+function tryBossSkills(m){
+  if (!m.skillLoadout || !m.skillLoadout.length) {
+    // safety: give a default set if missing
+    m.skillLoadout = [
+      { key:'Fireball', level:2 },
+      { key:'Bash', level:2 }
+    ];
+  }
+  if (!m.skillCooldowns) m.skillCooldowns = {};
+
+  m.skillLoadout.forEach((entry) => {
+    const key = entry.key;
+    const level = entry.level || 1;
+    if (!key) return;
+    const def = SKILL_DB[key] || {};
+    const skillCdOverride = entry.cooldown ?? entry.cooldownFrames;
+    const skillCdMult = entry.cooldownMult ?? entry.cooldownMultiplier ?? 1;
+    const bossCdFactor = m.skillCooldownFactor || 1;
+    const baseFromSkill = def.cooldown ? Math.max(40, def.cooldown - level * 6) : 90;
+    const cdBase = skillCdOverride != null ? skillCdOverride : baseFromSkill;
+    const cdFinal = Math.max(20, Math.round(cdBase * skillCdMult * bossCdFactor));
+    const timer = m.skillCooldowns[key] ?? 0;
+    if (timer > 0) {
+      m.skillCooldowns[key] = timer - 1;
+      return;
+    }
+
+    const dx = player.x - m.x;
+    const dy = player.y - m.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    const dirX = dx / dist;
+    const dirY = dy / dist;
+
+    const launchProjectile = (speed, color, element='NEUTRAL', type=null, angleOverride=null) => {
+      const vx = dirX * speed;
+      const vy = dirY * speed;
+      const proj = new PlayerProjectile(
+        m.x,
+        m.y,
+        vx,
+        vy,
+        dmg,
+        element,
+        color || m.color,
+        160
+      );
+      if (type) {
+        proj.type = type;
+        proj.angle = angleOverride ?? Math.atan2(vy, vx);
+      }
+      bossProjectiles.push(proj);
+    };
+
+    const applyMeleeHit = (rangeBonus = 0, slow = false) => {
+      const reach = m.attackRange + rangeBonus;
+      if (dist <= reach) {
+        player.hp -= dmg;
+        if (slow) {
+          player.x -= dirX * 2;
+          player.y -= dirY * 2;
+        }
+        return true;
+      }
+      return false;
+    };
+
+    bossCastSkill(key, m, level);
+
+    m.skillCooldowns[key] = cdFinal;
+  });
+}
 
   // ----- DEFAULT MELEE ARCS (unused but safe if array empty) -----
   for (let i = meleeArcs.length - 1; i >= 0; i--) {
@@ -1297,13 +2146,48 @@ function loop() {
     }
   }
 
-    // ----- MONSTERS & BOSS -----
+  // ----- BOSS SKILL PROJECTILES (same visuals as player) -----
+  for (let i = bossProjectiles.length - 1; i >= 0; i--) {
+    const p = bossProjectiles[i];
+    p.update(paused);
+    const d = Math.hypot(p.x - player.x, p.y - player.y);
+    if (d < player.r + 6) {
+      player.hp -= p.dmg;
+      bossProjectiles.splice(i, 1);
+      continue;
+    }
+    let hitObs = false;
+    obstacles.forEach((o) => {
+      if (hitObs) return;
+      if (circleRectCollision(p.x, p.y, 4, o)) hitObs = true;
+    });
+    if (hitObs || p.life <= 0) {
+      bossProjectiles.splice(i, 1);
+      continue;
+    }
+  }
+
+  // ----- MONSTERS & BOSS -----
   currentMonsters.forEach((m) => {
+    if (!paused) {
+      if (m.fireVulnTimer > 0) {
+        m.fireVulnTimer--;
+        if (m.fireVulnTimer <= 0) m.fireVulnBonus = 0;
+      }
+      if (m.quagmireTimer > 0) m.quagmireTimer--;
+    }
+
     // ----- MOVEMENT -----
     const prevMx = m.x;
     const prevMy = m.y;
 
     m.moveTo(player, paused);
+    const movedThisFrame = m.x !== prevMx || m.y !== prevMy;
+    if (!m.anim) m.anim = { facing:1 };
+    const toPlayerX = player.x - m.x;
+    if (Math.abs(toPlayerX) > 1) {
+      m.anim.facing = toPlayerX >= 0 ? 1 : -1;
+    }
 
     // collide monsters with obstacles; if they intersect, revert movement
      obstacles.forEach((o) => {
@@ -1350,14 +2234,30 @@ function loop() {
       player.y += ny * push;
     }
 
+    // Boss passive regen
+    if (!paused && m.isBoss && m.passives?.hpRegen) {
+      if (!m._regenTimer) m._regenTimer = 360;
+      if (--m._regenTimer <= 0) {
+        m.hp = Math.min(m.maxHp, m.hp + (2 + m.passives.hpRegen * 3));
+        m._regenTimer = 360;
+      }
+    }
+
     // ----- ATTACKS -----
     if (!paused) {
+      if (m.isBoss) {
+        tryBossSkills(m);
+      }
       if (m.attackCooldown-- <= 0) {
         const d2 = Math.hypot(player.x - m.x, player.y - m.y);
         const contactDist = m.r + player.r + 4;
         const inRange = d2 <= Math.max(m.attackRange, contactDist);
 
         if (inRange) {
+          const dirX = player.x - m.x;
+          if (!m.anim) m.anim = { facing:1 };
+          m.anim.facing = dirX >= 0 ? 1 : -1;
+          m.attackAnimTimer = 18;
           if (m.attackType === 'melee') {
             // melee hit
             player.hp -= m.attackDamage;
@@ -1384,10 +2284,15 @@ function loop() {
     }
 
     // ----- DRAW MONSTER -----
-    ctx.beginPath();
-    ctx.arc(m.x, m.y, m.r, 0, Math.PI * 2);
-    ctx.fillStyle = m.color || '#fff';
-    ctx.fill();
+    drawMonster(ctx, m, movedThisFrame, paused);
+
+    if (m.quagmireTimer > 0) {
+      ctx.beginPath();
+      ctx.arc(m.x, m.y, m.r + 4, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(129, 199, 132, 0.9)';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    }
 
     // HP bar
     const w = 30;
@@ -1406,22 +2311,53 @@ function loop() {
       ctx.save();
       ctx.translate(p.x, p.y);
       ctx.rotate(p.angle || 0);
-
-      ctx.fillStyle = '#ffffff';
-      // shaft
-      ctx.fillRect(-10, -2, 20, 4);
-      // head
-      ctx.beginPath();
-      ctx.moveTo(10, 0);
-      ctx.lineTo(4, -4);
-      ctx.lineTo(4, 4);
-      ctx.closePath();
-      ctx.fill();
-
+      if (arrowSprite.ready) {
+        const w = arrowSprite.img.width;
+        const h = arrowSprite.img.height;
+        ctx.drawImage(arrowSprite.img, -w / 2, -h / 2, w, h);
+      } else {
+        ctx.fillStyle = p.color || '#ffffff';
+        ctx.fillRect(-10, -2, 20, 4);
+        ctx.beginPath();
+        ctx.moveTo(10, 0);
+        ctx.lineTo(4, -4);
+        ctx.lineTo(4, 4);
+        ctx.closePath();
+        ctx.fill();
+      }
       ctx.restore();
       return;
     }
 
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+    ctx.fillStyle = p.color || '#ff9800';
+    ctx.fill();
+  });
+
+  bossProjectiles.forEach((p) => {
+    if (p.type === 'arrow') {
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.angle || 0);
+
+      if (arrowSprite.ready) {
+        const w = arrowSprite.img.width;
+        const h = arrowSprite.img.height;
+        ctx.drawImage(arrowSprite.img, -w / 2, -h / 2, w, h);
+      } else {
+        ctx.fillStyle = p.color || '#ffffff';
+        ctx.fillRect(-10, -2, 20, 4);
+        ctx.beginPath();
+        ctx.moveTo(10, 0);
+        ctx.lineTo(4, -4);
+        ctx.lineTo(4, 4);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.restore();
+      return;
+    }
     ctx.beginPath();
     ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
     ctx.fillStyle = p.color || '#ff9800';
@@ -1481,6 +2417,16 @@ function loop() {
     ctx.stroke();
   });
 	
+  quagmires.forEach((f) => {
+    ctx.beginPath();
+    ctx.arc(f.x, f.y, f.radius, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(76, 175, 80, 0.28)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(139, 195, 74, 0.9)';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+  });
+	
   meteorStrikes.forEach((s) => {
     ctx.beginPath();
     ctx.arc(s.x, s.y, s.radius, 0, Math.PI * 2);
@@ -1513,6 +2459,28 @@ function loop() {
     ctx.arc(c.x, c.y, 6, 0, Math.PI * 2);
     ctx.fillStyle = '#ffeb3b';
     ctx.fill();
+  });
+
+  // ----- BOSS CHESTS -----
+  bossChests.forEach((c) => {
+    if (chestSprite.ready) {
+      const w = chestSprite.frameW;
+      const h = chestSprite.frameH;
+      const sy = c.opened ? h : 0;
+      ctx.drawImage(chestSprite.img, 0, sy, w, h, c.x - w / 2, c.y - h / 2, w, h);
+    } else {
+      ctx.beginPath();
+      ctx.rect(c.x - 14, c.y - 10, 28, 20);
+      ctx.fillStyle = '#d1a85c';
+      ctx.strokeStyle = '#7a5c1d';
+      ctx.lineWidth = 2;
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(c.x - 14, c.y);
+      ctx.lineTo(c.x + 14, c.y);
+      ctx.stroke();
+    }
   });
 
   stepPlayerAnimation(movedThisFrame, paused, player.hp <= 0);
@@ -1596,7 +2564,8 @@ function loop() {
   if (player.hp <= 0 && !gameOver) {
     gameOver = true;
     paused = true;
-    showMsg('YOU DIED — refresh the page to restart', 4000);
+    const lvlReached = player.level || 1;
+    openNameModal(lvlReached);
   }
 
   updateHUD();
