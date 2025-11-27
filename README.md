@@ -1,3 +1,19 @@
+11-27-2025 Update
+- Added obstacle sprites, spawns, and collision
+- Added back to title button on game over screen
+- Added an off-screen boss direction pointer: when the boss is active but not visible, an on-screen arrow appears toward its location
+- Removed Agility-based movement speed bonus; movement speed now uses only the base value plus gear modifiers
+- Bug Fix: Hid the HUD when returning to title by clearing its text and setting
+- Bug Fix: Raised the boss HP bar further down to avoid overlapping the HUD and Character button, especially on mobile
+* Added four new derived stats and wired them up in the character stats panel:
+    * Cooldown Reduction (shows net frame change from cooldown/attack speed gear).
+    * HP Regen per second (from HP Regen skill plus a small gear HP contribution).
+    * Bonus HP from items/skills (with total HP context).
+    * Current Skill Range (Dex-influenced average projectile range).
+* Adjusted item bonuses
+* Added new set of items
+* Added item rarity color effect on item in inventory and shop list
+
 11-26-2025 Update
 
 - Added new Skills (Quagmire, Double Attack, and Arrow Shower)
