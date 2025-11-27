@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Project Midgard</title>
+  <title>Dungeon Siege: An Arcane Survival</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#ffffff" />
   <link rel="manifest" href="./manifest.json" />
@@ -274,6 +274,11 @@
       margin-bottom: 0.65rem;
     }
 
+    /* Name modal has no skip/close button; center the title */
+    #nameModal .options-top {
+      justify-content: center;
+    }
+
     .options-top h3 {
       margin: 0;
       font-size: 1.05rem;
@@ -290,6 +295,11 @@
       border-radius: 10px;
       cursor: pointer;
       font-weight: 700;
+    }
+
+    .close-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
     }
 
     .toggle-row {
@@ -438,12 +448,15 @@
 
     .name-actions {
       display: flex;
+      flex-direction: row;
       gap: 0.6rem;
       margin-top: 0.35rem;
+      flex-wrap: wrap;
     }
 
     .name-actions button {
-      flex: 1;
+      flex: 1 1 0;
+      min-width: 140px;
     }
   </style>
 </head>
@@ -503,6 +516,10 @@
         <input type="checkbox" id="adminToggle" />
         <span>Enable Admin Mode (debug stats / skills / gold)</span>
       </label>
+      <label class="toggle-row">
+        <input type="checkbox" id="bossDebugToggle" />
+        <span>Start at first boss (debug)</span>
+      </label>
       <div class="about-box">
         <strong>About the Developer</strong><br/>
         This game is being developed by Bisukemar.
@@ -517,7 +534,6 @@
     <div class="options-card name-card">
       <div class="options-top">
         <h3>Record Your Run</h3>
-        <button id="nameCloseBtn" class="close-btn">Skip</button>
       </div>
       <div class="name-field">
         <label for="nameInput">Name</label>
@@ -528,6 +544,7 @@
       </div>
       <div class="name-actions title-buttons">
         <button id="nameSaveBtn">Save Run</button>
+        <button id="nameRestartBtn" class="secondary">Return to Title</button>
       </div>
     </div>
   </div>

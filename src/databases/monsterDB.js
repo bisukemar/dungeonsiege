@@ -44,7 +44,16 @@ export const BOSS_DB = [
       { key:'Magnum', level:2 },
       { key:'Toughness', level:3 }
     ],
-    bossDrops:['earthbreaker_sash','ember_crown','hydra_band'],
+    bossDrops:[
+      // Uncommon (4)
+      'thorned_wrap','scout_vest','bronze_buckler','drill_rapier',
+      // Rare (3)
+      'verdant_wrap','runed_brigandine','tide_ward',
+      // Legendary (2)
+      'juggernaut_cuirass','titan_guard',
+      // Unique (1)
+      'phoenix_charm'
+    ],
     sprite:DEFAULT_SPRITE
   },
   {
@@ -64,7 +73,16 @@ export const BOSS_DB = [
       { key:'Haste', level:2 }
     ],
     skillCooldownFactor:1.5,
-    bossDrops:['ember_crown','phoenix_charm','stormrunner_boots'],
+    bossDrops:[
+      // Uncommon
+      'ashen_wand','courier_boots','sentry_sash','breeze_hood',
+      // Rare
+      'emberweave_cloak','glacial_scepter','windstep_boots',
+      // Legendary
+      'inferno_staff','crown_of_sparks',
+      // Unique
+      'pyromancer_revenge'
+    ],
     sprite:DEFAULT_SPRITE
   },
   {
@@ -83,7 +101,16 @@ export const BOSS_DB = [
       { key:'Magnum', level:2 },
       { key:'HPRegen', level:2 }
     ],
-    bossDrops:['tidal_robe','hydra_band','phoenix_charm'],
+    bossDrops:[
+      // Uncommon
+      'layered_jerkin','steady_bracelet','cushioned_greaves','hide_kite',
+      // Rare
+      'siren_vestments','tide_ward','runed_brigandine',
+      // Legendary
+      'arcanist_plate','stormstride_sandals',
+      // Unique
+      'phoenix_charm'
+    ],
     sprite:DEFAULT_SPRITE
   },
   {
@@ -102,7 +129,16 @@ export const BOSS_DB = [
       { key:'Bash', level:3 },
       { key:'Haste', level:2 }
     ],
-    bossDrops:['stormrunner_boots','hydra_band','ember_crown'],
+    bossDrops:[
+      // Uncommon
+      'breeze_hood','courier_boots','drill_rapier','bronze_buckler',
+      // Rare
+      'falcon_visor','runed_brigandine','windstep_boots',
+      // Legendary
+      'tempest_longbow','hawkeye_helm',
+      // Unique
+      'phoenix_charm'
+    ],
     sprite:DEFAULT_SPRITE
   },
   {
@@ -121,7 +157,16 @@ export const BOSS_DB = [
       { key:'Bash', level:3 },
       { key:'HPRegen', level:3 }
     ],
-    bossDrops:['earthbreaker_sash','phoenix_charm','tidal_robe'],
+    bossDrops:[
+      // Uncommon
+      'thorned_wrap','steady_bracelet','cushioned_greaves','hide_kite',
+      // Rare
+      'siren_vestments','tide_ward','emberweave_cloak',
+      // Legendary
+      'colossus_greathammer','juggernaut_cuirass',
+      // Unique
+      'phoenix_charm'
+    ],
     sprite:DEFAULT_SPRITE
   }
 ];

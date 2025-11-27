@@ -58,7 +58,8 @@ const rankingList = document.getElementById('rankingList');
 const nameModal = document.getElementById('nameModal');
 const nameInput = document.getElementById('nameInput');
 const nameSaveBtn = document.getElementById('nameSaveBtn');
-const nameCloseBtn = document.getElementById('nameCloseBtn');
+const nameRestartBtn = document.getElementById('nameRestartBtn');
+const bossDebugToggle = document.getElementById('bossDebugToggle');
 
 // ========= PLAYER SPRITE / ANIMATION =========
 const PLAYER_SHEET_ROWS = 10;
@@ -73,6 +74,7 @@ const GENDER_STORAGE_KEY = 'dungeonsiege_gender';
 let playerGender = 'male';
 const arrowSprite = { img: new Image(), ready: false };
 const chestSprite = { img: new Image(), ready: false, frameH: 0, frameW: 0 };
+const obstacleSpriteCache = new Map();
 const monsterSpriteCache = new Map();
 const ITEM_MAP = Object.fromEntries((ITEMS_DB || []).map((it) => [it.id, it]));
 const previewSprite = {
@@ -474,8 +476,19 @@ player.unlocks = {
   Haste: false,
   Precision: false,
   HPRegen: false,
-	Meteor: false 
+  Meteor: false,
+  DoubleAttack: false,
+  Quagmire: false,
+  ArrowShower: false
 };
+
+// Round / progression state (EXP disabled; leveling per round)
+let round = 1;
+let killsThisRound = 0;
+let spawnTimer = 0;
+let bossMode = false;
+let bossEntity = null;
+let regenTimer = 360;
 
 // Skill cooldowns table
 player.skillCooldowns = {};
@@ -542,6 +555,7 @@ function createMobileJoystick(canvasEl) {
     root.style.display = 'none';
     thumb.style.transform = 'translate(-50%, -50%)';
   }
+  state.hide = hide;
 
   function updateThumb(touchX, touchY) {
     const dx = touchX - state.startX;
@@ -630,6 +644,7 @@ let gameOver = false;
 let overlayOpen = false;
 let resumeCountdown = 0;
 let adminModeEnabled = false; // toggled in options
+let startAtBossDebug = false;
 let gameStarted = false;      // true only after setup is valid
 let preGameSetup = false;     // true only during the initial allocation
 let gameLoopStarted = false;  // so we don't start loop twice
@@ -767,7 +782,11 @@ function openNameModal(level) {
     const clean = (fallbackName || '').trim() || 'Unknown Adventurer';
     addLeaderboardEntry(clean, level);
     renderLeaderboard();
-    showMsg(`YOU DIED — ${clean}'s run saved at Lv ${level}. Refresh to restart`, 5000);
+    showMsg(
+      `YOU DIED — ${clean}'s run saved at Lv ${level}. Use Return to Title to play again.`,
+      8000,
+      { actionLabel: 'Back to Title', onAction: restartToTitle }
+    );
     return;
   }
   nameInput.value = 'Hero';
@@ -789,7 +808,110 @@ function submitNameModal(useInput=true) {
   renderLeaderboard();
   closeNameModal();
   pendingLeaderboardLevel = null;
-  showMsg(`YOU DIED — ${name}'s run saved at Lv ${level}. Refresh to restart`, 5000);
+  showMsg(
+    `YOU DIED — ${name}'s run saved at Lv ${level}. Use Return to Title to play again.`,
+    8000,
+    { actionLabel: 'Back to Title', onAction: restartToTitle }
+  );
+}
+
+function restartToTitle() {
+  // Reset high-level flags first so modal/overlay callbacks stay inert
+  gameOver = false;
+  gameStarted = false;
+  preGameSetup = false;
+  overlayOpen = false;
+  paused = false;
+  resumeCountdown = 0;
+  gameLoopStarted = false;
+  pendingLeaderboardLevel = null;
+  activeChest = null;
+
+  closeNameModal();
+  closeRankingModal();
+  if (optionsModal) optionsModal.style.display = 'none';
+
+  if (overlay) overlay.close();
+  closeShopChoiceOverlay();
+  closeChestOverlay();
+
+  msgTimer = 0;
+  msgDiv.innerHTML = '';
+  msgDiv.style.pointerEvents = 'none';
+  if (uiDiv) {
+    uiDiv.textContent = '';
+    uiDiv.style.display = 'none';
+  }
+  if (pausedText) pausedText.style.display = 'none';
+  if (topBar) topBar.style.display = 'none';
+
+  // Core progression + combat state
+  round = 1;
+  killsThisRound = 0;
+  spawnTimer = 0;
+  bossMode = false;
+  bossEntity = null;
+  regenTimer = 360;
+  keys = {};
+  if (joystick && typeof joystick.hide === 'function') joystick.hide();
+
+  monsters.length = 0;
+  playerProjectiles.length = 0;
+  bossProjectiles.length = 0;
+  monsterProjectiles.length = 0;
+  iceWaves.length = 0;
+  bashWaves.length = 0;
+  magnumWaves.length = 0;
+  meleeArcs.length = 0;
+  meteorStrikes.length = 0;
+  quagmires.length = 0;
+  bossChests.length = 0;
+  damageTexts.length = 0;
+  coins.length = 0;
+  obstacles.length = 0;
+
+  // Player baseline
+  player.inventory = [];
+  player.equip = { head:null, armor:null, weapon:null, shield:null, garment:null, shoes:null, accL:null, accR:null };
+  player.stats = { str:3, agi:3, int:3, dex:3, vit:3, luck:3 };
+  player.skillLevel = {};
+  player.unlocks = {};
+  player.skillCooldowns = {};
+  Object.keys(SKILL_DB).forEach((k) => {
+    player.skillLevel[k] = 0;
+    player.unlocks[k] = false;
+    player.skillCooldowns[k] = 0;
+  });
+  player.adminMode = false;
+  player.statPoints = 0;
+  player.skillPoints = 0;
+  player._savedStatPoints = 0;
+  player._savedSkillPoints = 0;
+  player.gold = INITIAL_GOLD;
+  player.level = 1;
+  player.exp = 0;
+  player.expToLevel = 0;
+  player.hp = player.getMaxHp();
+  player.defaultAttackTimer = 0;
+
+  facingX = 1;
+  facingY = 0;
+  player.dx = facingX;
+  player.dy = facingY;
+  player.x = world.width / 2;
+  player.y = world.height / 2;
+  centerCamera(player);
+
+  playerSprite.state = 'idle';
+  playerSprite.frame = 0;
+  playerSprite.frameTimer = 0;
+  playerSprite.attackTimer = 0;
+
+  overlay = null;
+
+  if (titleScreen) titleScreen.style.display = 'flex';
+  if (bossDebugToggle) bossDebugToggle.checked = false;
+  startAtBossDebug = false;
 }
 
 function startGameLoop() {
@@ -885,6 +1007,12 @@ if (adminToggle) {
   };
 }
 
+if (bossDebugToggle) {
+  bossDebugToggle.onchange = (e) => {
+    startAtBossDebug = !!e.target.checked;
+  };
+}
+
 if (adminBtn) {
   // Start hidden; only show if adminModeEnabled is true
   adminBtn.style.display = adminModeEnabled ? 'inline-block' : 'none';
@@ -922,14 +1050,8 @@ if (nameSaveBtn) {
   nameSaveBtn.onclick = () => submitNameModal(true);
 }
 
-if (nameCloseBtn) {
-  nameCloseBtn.onclick = () => submitNameModal(false);
-}
-
-if (nameModal) {
-  nameModal.addEventListener('click', (e) => {
-    if (e.target === nameModal) submitNameModal(false);
-  });
+if (nameRestartBtn) {
+  nameRestartBtn.onclick = () => restartToTitle();
 }
 
 // PWA install prompt
@@ -1003,6 +1125,7 @@ titleStartBtn.onclick = () => {
   closeRankingModal();
   // Hide title screen
   if (titleScreen) titleScreen.style.display = 'none';
+  if (uiDiv) uiDiv.style.display = 'block';
 
   // Prep for pre-game setup
   preGameSetup = true;
@@ -1096,6 +1219,18 @@ function handleOverlayClosed() {
     monsters.length = 0;
     spawnTimer = 0;
     obstacles.length = 0;
+    resetObstaclesForRound(round, player);
+
+    if (startAtBossDebug) {
+      round = 5; // first boss appears at round 5
+      bossMode = true;
+      bossEntity = spawnBoss(canvas, round);
+      monsters.length = 0;
+      spawnTimer = 0;
+      killsThisRound = 0;
+      resetObstaclesForRound(round, player);
+      if (bossEntity) showMsg(`BOSS: ${bossEntity.name}`, 2500);
+    }
 
     paused = false;
     pausedText.style.display = 'none';
@@ -1290,6 +1425,22 @@ function openShopWithChoice() {
 
 // --- Boss Chest UI ---
 let chestOverlay = null;
+const CHEST_RARITY_STYLE_ID = 'rarity-shimmer-style';
+
+function ensureRarityShimmerStyle() {
+  if (typeof document === 'undefined') return;
+  if (document.getElementById(CHEST_RARITY_STYLE_ID)) return;
+  const style = document.createElement('style');
+  style.id = CHEST_RARITY_STYLE_ID;
+  style.textContent = `
+    @keyframes rarityShimmer {
+      0% { background-position: 50% 50%, 50% 50%; background-size: 200% 200%, 140% 140%; filter: brightness(1); }
+      50% { background-position: 40% 60%, 60% 40%; background-size: 230% 230%, 180% 180%; filter: brightness(1.08); }
+      100% { background-position: 50% 50%, 50% 50%; background-size: 200% 200%, 140% 140%; filter: brightness(1); }
+    }
+  `;
+  document.head.appendChild(style);
+}
 
 function closeChestOverlay() {
   if (chestOverlay) {
@@ -1333,7 +1484,28 @@ function chestItemIcon(item){
   box.style.width = '76px';
   box.style.height = '76px';
   box.style.borderRadius = '.55rem';
-  box.style.background = 'linear-gradient(180deg, #fefefe 0%, #e5edfb 100%)';
+  const rarity = (item && item.rarity) || 'Common';
+  const rarityBg = rarity === 'Uncommon'
+    ? 'linear-gradient(180deg, #ecfdf3 0%, #d1fae5 100%)'
+    : rarity === 'Rare'
+    ? 'linear-gradient(180deg, #eef2ff 0%, #dfe3ff 100%)'
+    : rarity === 'Legendary'
+    ? 'linear-gradient(135deg, #fef3c7 0%, #fcd34d 45%, #fbbf24 50%, #fcd34d 55%, #fef3c7 100%)'
+    : rarity === 'Unique'
+    ? 'linear-gradient(135deg, #fce7ef 0%, #fbcfdc 40%, #f8b9cb 50%, #fbcfdc 60%, #fce7ef 100%)'
+    : 'linear-gradient(180deg, #fefefe 0%, #e5edfb 100%)';
+  if (rarity === 'Legendary' || rarity === 'Unique') {
+    const burst = 'radial-gradient(circle at 50% 50%, rgba(255,255,255,0.35), rgba(255,255,255,0) 60%)';
+    box.style.backgroundImage = `${rarityBg}, ${burst}`;
+    box.style.backgroundBlendMode = 'screen';
+  } else {
+    box.style.background = rarityBg;
+  }
+  if (rarity === 'Legendary' || rarity === 'Unique') {
+    ensureRarityShimmerStyle();
+    box.style.backgroundSize = '240% 240%, 200% 200%';
+    box.style.animation = 'rarityShimmer 2.6s ease-in-out infinite';
+  }
   box.style.border = '1px dashed #b8cff1';
   box.style.display = 'flex';
   box.style.alignItems = 'center';
@@ -1399,6 +1571,18 @@ function openChestOverlay(chest) {
   title.style.fontWeight = '700';
   header.appendChild(title);
 
+  const rightHeader = document.createElement('div');
+  rightHeader.style.display = 'flex';
+  rightHeader.style.alignItems = 'center';
+  rightHeader.style.gap = '.55rem';
+
+  const goldLabel = document.createElement('span');
+  goldLabel.textContent = `Gold: ${player.gold || 0}`;
+  goldLabel.style.fontSize = '.82rem';
+  goldLabel.style.fontWeight = '600';
+  goldLabel.style.opacity = '0.9';
+  rightHeader.appendChild(goldLabel);
+
   const reroll = document.createElement('button');
   reroll.textContent = `Re-roll (${CHEST_REROLL_COST} gold)`;
   reroll.style.borderRadius = '999px';
@@ -1408,6 +1592,10 @@ function openChestOverlay(chest) {
   reroll.style.padding = '.35rem .75rem';
   reroll.style.cursor = 'pointer';
   reroll.onclick = () => {
+    if (!paused && gameStarted) {
+      paused = true;
+      pausedText.style.display = 'block';
+    }
     if ((player.gold || 0) < CHEST_REROLL_COST) {
       showMsg('Not enough gold to re-roll!', 1500);
       return;
@@ -1415,8 +1603,14 @@ function openChestOverlay(chest) {
     player.gold -= CHEST_REROLL_COST;
     chest.options = pickChestOptions(chest.poolIds || []);
     openChestOverlay(chest);
+    // ensure the game stays paused after reroll
+    if (gameStarted) {
+      paused = true;
+      pausedText.style.display = 'block';
+    }
   };
-  header.appendChild(reroll);
+  rightHeader.appendChild(reroll);
+  header.appendChild(rightHeader);
   panel.appendChild(header);
 
   const subtitle = document.createElement('div');
@@ -1508,9 +1702,7 @@ function openChestOverlay(chest) {
     grid.appendChild(card);
   });
 
-  chestOverlay.addEventListener('click', (e) => {
-    if (e.target === chestOverlay) closeChestOverlay();
-  });
+  // No backdrop close; selection is required
 
   document.body.appendChild(chestOverlay);
 }
@@ -1529,17 +1721,61 @@ function spawnBossChest(boss) {
 }
 // ========= OBSTACLES =========
 const obstacles = [];
+const OBSTACLE_META = [
+  { src:'assets/tree_big.png', w:90, h:128 },
+  { src:'assets/tree_thin.png', w:46, h:84 },
+  { src:'assets/tree_root.png', w:52, h:36 },
+  { src:'assets/tree_bush.png', w:64, h:64 },
+  { src:'assets/rock.png', w:16, h:15 }
+];
+
+function loadObstacleSprite(src) {
+  if (obstacleSpriteCache.has(src)) return obstacleSpriteCache.get(src);
+  const img = new Image();
+  const rec = { img, ready:false };
+  img.onload = () => { rec.ready = true; };
+  img.src = src;
+  obstacleSpriteCache.set(src, rec);
+  return rec;
+}
+
+function pickObstacleSprite() {
+  const meta = OBSTACLE_META[Math.floor(Math.random() * OBSTACLE_META.length)];
+  const sprite = loadObstacleSprite(meta.src);
+  return { sprite, meta };
+}
+
 function addRandomObstacles(round, playerRef) {
-  const count = 2 + Math.floor(round / 2);
+  const count = 44 + Math.floor(round / 1.5);
   const maxAttempts = 20;
   for (let i = 0; i < count; i++) {
-    const w = 120 + Math.random() * 80 + round * 4;
-    const h = 80 + Math.random() * 80 + round * 4;
+    const pick = pickObstacleSprite();
+    const meta = pick.meta || {};
+    const scale = 0.9 + Math.random() * 0.25;
+    const baseW = meta.w || (pick.sprite?.img?.width || 120);
+    const baseH = meta.h || (pick.sprite?.img?.height || 120);
+    const w = baseW * scale;
+    const h = baseH * scale;
     let placed = false;
     for (let attempt = 0; attempt < maxAttempts && !placed; attempt++) {
       const x = Math.random() * (world.width - w);
       const y = Math.random() * (world.height - h);
-      const rect = { x, y, w, h };
+      const colW = w * 0.9;
+      // Expand collision upward more to cover the canopy
+      const colH = h * 1.25;
+      const colYOffset = h * 0.25;
+      const rect = {
+        x,
+        y,
+        w,
+        h,
+        colX: x + (w - colW) / 2,
+        colY: y - colYOffset,
+        colW,
+        colH,
+        sprite: pick.sprite,
+        meta
+      };
       const overlapsPlayer =
         playerRef &&
         circleRectCollision(playerRef.x, playerRef.y, playerRef.r + 12, rect);
@@ -1556,9 +1792,12 @@ function resetObstaclesForRound(round, playerRef) {
   addRandomObstacles(round, playerRef);
 }
 
+// initial obstacles for round 1
+// (moved to handleOverlayClosed when game starts)
+
 function circleRectCollision(cx, cy, r, rect) {
-  const rx = Math.max(rect.x, Math.min(cx, rect.x + rect.w));
-  const ry = Math.max(rect.y, Math.min(cy, rect.y + rect.h));
+  const rx = Math.max(rect.colX ?? rect.x, Math.min(cx, (rect.colX ?? rect.x) + (rect.colW ?? rect.w)));
+  const ry = Math.max(rect.colY ?? rect.y, Math.min(cy, (rect.colY ?? rect.y) + (rect.colH ?? rect.h)));
   const dx = cx - rx;
   const dy = cy - ry;
   return dx * dx + dy * dy <= r * r;
@@ -1578,15 +1817,7 @@ const quagmires = [];
 const bossChests = [];
 const damageTexts = [];
 const coins = [];
-
-let round = 1;
-let killsThisRound = 0;
-let spawnTimer = 0;
-let bossMode = false;
-let bossEntity = null;
-let regenTimer = 360;
-
-// Obstacles are generated after each boss round (see resetObstaclesForRound).
+// Obstacles are generated each round (including round 1).
 
 // ========= ROUND & SCALING =========
 function killsForRound(r) {
@@ -1687,13 +1918,13 @@ function bossCastSkill(key, boss, level){
     bossProjectiles.push(new PlayerProjectile(boss.x, boss.y, vx, vy, dmg, 'WATER', '#6cf', life));
   } else if (key === 'Bash') {
     if (dist <= boss.attackRange + 32) {
-      player.hp -= dmg;
+      applyDamageToPlayer(dmg);
       player.x -= dirX * 3;
       player.y -= dirY * 3;
     }
   } else if (key === 'Magnum') {
     if (dist < 180) {
-      player.hp -= dmg;
+      applyDamageToPlayer(dmg);
     }
   } else if (key === 'Meteor') {
     const radius = 80 + level * 8;
@@ -1704,14 +1935,123 @@ function bossCastSkill(key, boss, level){
 
 // ========= MESSAGES / HUD =========
 let msgTimer = 0;
+let reviveCountdown = 0;
+let reviveSource = null;
 
-function showMsg(text, ms = 2000) {
+function showMsg(text, ms = 2000, opts = {}) {
   msgDiv.innerHTML = '';
   const box = document.createElement('div');
   box.className = 'banner';
   box.textContent = text;
+  if (opts.actionLabel && typeof opts.onAction === 'function') {
+    msgDiv.style.pointerEvents = 'auto';
+    const btn = document.createElement('button');
+    btn.textContent = opts.actionLabel;
+    btn.style.display = 'block';
+    btn.style.margin = '0.6rem auto 0';
+    btn.style.padding = '0.4rem 0.9rem';
+    btn.style.borderRadius = '10px';
+    btn.style.border = '1px solid #7fa8d7';
+    btn.style.background = 'linear-gradient(180deg, #fdfdff 0%, #cde0f8 100%)';
+    btn.style.color = '#15243d';
+    btn.style.cursor = 'pointer';
+    btn.onclick = opts.onAction;
+    box.appendChild(btn);
+  } else {
+    msgDiv.style.pointerEvents = 'none';
+  }
   msgDiv.appendChild(box);
   msgTimer = ms / 16;
+}
+
+function applyDamageToPlayer(rawDmg) {
+  const defense = typeof player.getDefense === 'function' ? player.getDefense() : player.defense || 0;
+  const reduction = Math.min(defense / 100, 0.7); // max 70% reduction
+  const final = Math.max(1, Math.round(rawDmg * (1 - reduction)));
+  player.hp -= final;
+  if (player.hp < 0) player.hp = 0;
+  return final;
+}
+
+function tryReviveOnDeath() {
+  if (!player.equip) return false;
+  let triggered = false;
+  Object.entries(player.equip).some(([slot, item]) => {
+    const ability = item?.bonuses?.uniqueAbility?.onDeath;
+    if (!ability || triggered) return false;
+    const ctx = {
+      player,
+      reviveWithDelay: (seconds = 5) => {
+        const frames = Math.max(1, Math.round(seconds * 60));
+        reviveCountdown = frames;
+        reviveSource = item?.name || 'Revive';
+        player.hp = 1; // hold at 1 HP while reviving
+        paused = true;
+        pausedText.style.display = 'block';
+        msgTimer = 0;
+        msgDiv.innerHTML = '';
+        msgDiv.style.pointerEvents = 'none';
+        triggered = true;
+        // consume only the equipped item; leave inventory copies intact
+        player.equip[slot] = null;
+      }
+    };
+    try {
+      ability(ctx);
+    } catch (e) {
+      console.warn('Unique ability onDeath failed', e);
+    }
+    return triggered;
+  });
+  return triggered;
+}
+
+function drawBossPointer(ctx) {
+  if (!bossMode || !bossEntity) return;
+  const bossScreenX = bossEntity.x - cam.x;
+  const bossScreenY = bossEntity.y - cam.y;
+  const inView =
+    bossScreenX >= 0 &&
+    bossScreenX <= canvas.width &&
+    bossScreenY >= 0 &&
+    bossScreenY <= canvas.height;
+  if (inView) return;
+
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+  const dx = bossScreenX - cx;
+  const dy = bossScreenY - cy;
+  const angle = Math.atan2(dy, dx);
+
+  const marginX = 36;
+  const marginY = window.innerWidth < 960 ? 110 : 80;
+  const maxX = cx - marginX;
+  const maxY = cy - marginY;
+  const cosA = Math.cos(angle);
+  const sinA = Math.sin(angle);
+  const scaleX = cosA !== 0 ? maxX / Math.abs(cosA) : Infinity;
+  const scaleY = sinA !== 0 ? maxY / Math.abs(sinA) : Infinity;
+  const t = Math.min(scaleX, scaleY);
+
+  const arrowX = cx + cosA * t;
+  const arrowY = cy + sinA * t;
+
+  ctx.save();
+  ctx.translate(arrowX, arrowY);
+  ctx.rotate(angle);
+  const size = 16;
+  ctx.fillStyle = '#d1a85c';
+  ctx.strokeStyle = '#7a5c1d';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(size, 0);
+  ctx.lineTo(-size * 0.6, size * 0.6);
+  ctx.lineTo(-size * 0.2, 0);
+  ctx.lineTo(-size * 0.6, -size * 0.6);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
 }
 
 
@@ -1852,9 +2192,16 @@ function loop() {
   }
 
   // ----- OBSTACLES -----
-  ctx.fillStyle = '#222c38';
   obstacles.forEach((o) => {
-    ctx.fillRect(o.x, o.y, o.w, o.h);
+    if (o.sprite?.ready) {
+      const img = o.sprite.img;
+      const w = o.w || o.meta?.w || img.width;
+      const h = o.h || o.meta?.h || img.height;
+      ctx.drawImage(img, o.x, o.y, w, h);
+    } else {
+      ctx.fillStyle = '#222c38';
+      ctx.fillRect(o.x, o.y, o.w, o.h);
+    }
   });
 
   // ----- MOVEMENT -----
@@ -1890,10 +2237,14 @@ function loop() {
   // collide player with obstacles: if overlapping, gently slide out to the nearest edge
   obstacles.forEach((o) => {
     if (!circleRectCollision(player.x, player.y, player.r, o)) return;
-    const leftPen = player.x + player.r - o.x;
-    const rightPen = o.x + o.w - (player.x - player.r);
-    const topPen = player.y + player.r - o.y;
-    const bottomPen = o.y + o.h - (player.y - player.r);
+    const ox = o.colX ?? o.x;
+    const oy = o.colY ?? o.y;
+    const ow = o.colW ?? o.w;
+    const oh = o.colH ?? o.h;
+    const leftPen = player.x + player.r - ox;
+    const rightPen = ox + ow - (player.x - player.r);
+    const topPen = player.y + player.r - oy;
+    const bottomPen = oy + oh - (player.y - player.r);
     const minPen = Math.min(leftPen, rightPen, topPen, bottomPen);
     const push = Math.max(0.35, Math.min(minPen, 2.5)); // slow slide out
     if (minPen === leftPen) {
@@ -2021,12 +2372,12 @@ function loop() {
         });
         useSkill('Magnum', 180, () => castMagnum(player, magnumWaves));
         useSkill('Quagmire', 260, () =>
-          castQuagmire(player, quagmires, nearestWithFacing)
+          castQuagmire(player, quagmires, nearestWithFacing, meteorStrikes)
         );
-		  
-		  useSkill('Meteor', 240, () =>
-        castMeteorStorm(player, meteorStrikes, nearestWithFacing)
-      );
+
+        useSkill('Meteor', 240, () =>
+          castMeteorStorm(player, meteorStrikes, nearestWithFacing, quagmires)
+        );
 		  
       }
     });
@@ -2203,7 +2554,7 @@ function tryBossSkills(m){
     const applyMeleeHit = (rangeBonus = 0, slow = false) => {
       const reach = m.attackRange + rangeBonus;
       if (dist <= reach) {
-        player.hp -= dmg;
+        applyDamageToPlayer(dmg);
         if (slow) {
           player.x -= dirX * 2;
           player.y -= dirY * 2;
@@ -2241,7 +2592,7 @@ function tryBossSkills(m){
     p.update(paused);
     const d = Math.hypot(p.x - player.x, p.y - player.y);
     if (d < player.r + 5) {
-      player.hp -= p.dmg;
+      applyDamageToPlayer(p.dmg);
       monsterProjectiles.splice(i, 1);
       continue;
     }
@@ -2262,7 +2613,7 @@ function tryBossSkills(m){
     p.update(paused);
     const d = Math.hypot(p.x - player.x, p.y - player.y);
     if (d < player.r + 6) {
-      player.hp -= p.dmg;
+      applyDamageToPlayer(p.dmg);
       bossProjectiles.splice(i, 1);
       continue;
     }
@@ -2370,7 +2721,7 @@ function tryBossSkills(m){
           m.attackAnimTimer = 18;
           if (m.attackType === 'melee') {
             // melee hit
-            player.hp -= m.attackDamage;
+            applyDamageToPlayer(m.attackDamage);
           } else {
             // ranged projectile
             const vx = ((player.x - m.x) / d2) * 4;
@@ -2631,7 +2982,9 @@ function tryBossSkills(m){
   if (bossMode && bossEntity) {
     const w = Math.min(canvas.width - 80, 500);
     const x = cam.x + (canvas.width - w) / 2;
-    const y = cam.y + 20;
+    // Keep the boss bar clear of the HUD and top buttons (mobile especially)
+    const topOffset = window.innerWidth < 960 ? 120 : 64;
+    const y = cam.y + topOffset;
     const frac = Math.max(0, Math.min(1, bossEntity.hp / bossEntity.maxHp));
     ctx.fillStyle = 'rgba(0,0,0,0.7)';
     ctx.fillRect(x, y, w, 10);
@@ -2646,11 +2999,34 @@ function tryBossSkills(m){
 
   ctx.restore();
 
+  drawBossPointer(ctx);
+
   // ----- MESSAGE TIMER -----
   if (msgTimer > 0) {
     msgTimer--;
     if (msgTimer <= 0) {
       msgDiv.innerHTML = '';
+      msgDiv.style.pointerEvents = 'none';
+    }
+  }
+
+  // ----- REVIVE COUNTDOWN -----
+  if (reviveCountdown > 0) {
+    reviveCountdown--;
+    const secondsLeft = Math.ceil(reviveCountdown / 60);
+    msgDiv.innerHTML = '';
+    const box = document.createElement('div');
+    box.className = 'banner';
+    box.textContent = `Reviving in ${secondsLeft}...`;
+    msgDiv.appendChild(box);
+    if (reviveCountdown <= 0) {
+      player.hp = player.getMaxHp();
+      paused = false;
+      pausedText.style.display = 'none';
+      msgDiv.innerHTML = '';
+      showMsg(`${reviveSource || 'A charm'} crumbles — revived!`, 2200);
+      msgDiv.style.pointerEvents = 'none';
+      reviveSource = null;
     }
   }
 	
@@ -2667,15 +3043,21 @@ function tryBossSkills(m){
       paused = false;
       pausedText.style.display = 'none';
       msgDiv.innerHTML = '';
+      msgDiv.style.pointerEvents = 'none';
     }
   }
 
   // ----- GAME OVER -----
   if (player.hp <= 0 && !gameOver) {
-    gameOver = true;
-    paused = true;
-    const lvlReached = player.level || 1;
-    openNameModal(lvlReached);
+    // Unique death-save (e.g., Phoenix Charm)
+    if (tryReviveOnDeath()) {
+      // keep game running; revive countdown handles unpausing
+    } else {
+      gameOver = true;
+      paused = true;
+      const lvlReached = player.level || 1;
+      openNameModal(lvlReached);
+    }
   }
 
   updateHUD();

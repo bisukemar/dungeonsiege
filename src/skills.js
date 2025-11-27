@@ -1,6 +1,26 @@
 import { PlayerProjectile } from './entities.js';
 import { SKILL_DB } from './databases/skillDB.js';
 
+function adjustAoEPosition(cx, cy, radius, blockers = []) {
+  const minGap = 8;
+  const overlaps = (x, y) => blockers.some((b) => {
+    const br = b?.radius ?? b?.r ?? 0;
+    const dx = (b?.x ?? 0) - x;
+    const dy = (b?.y ?? 0) - y;
+    return Math.hypot(dx, dy) < radius + br + minGap;
+  });
+  if (!overlaps(cx, cy)) return { x: cx, y: cy };
+  const maxBlockRadius = blockers.reduce((m, b) => Math.max(m, b?.radius ?? b?.r ?? 0), 0);
+  for (let i = 0; i < 12; i++) {
+    const ang = (Math.PI * 2 * i) / 12;
+    const step = radius + maxBlockRadius + minGap + 20;
+    const nx = cx + Math.cos(ang) * step;
+    const ny = cy + Math.sin(ang) * step;
+    if (!overlaps(nx, ny)) return { x: nx, y: ny };
+  }
+  return { x: cx, y: cy };
+}
+
 function getEffectiveSkillLevel(player, key) {
   if (typeof player.getEffectiveSkillLevel === 'function') {
     return player.getEffectiveSkillLevel(key);
@@ -21,7 +41,7 @@ function computeProjectileLifeForDex(baseRange, speed, dex) {
   return Math.max(15, life); // safety floor
 }
 
-export function castMeteorStorm(player, meteorStrikes, nearestFn) {
+export function castMeteorStorm(player, meteorStrikes, nearestFn, avoidFields = []) {
   const level = getEffectiveSkillLevel(player, 'Meteor');
   if (level <= 0) return;
 
@@ -50,7 +70,25 @@ export function castMeteorStorm(player, meteorStrikes, nearestFn) {
     dmg = player.addSkillBonusDamage('Meteor', dmg);
   }
 
-  meteorStrikes.push(new MeteorStrike(centerX, centerY, radius, delay, dmg));
+  const adj = adjustAoEPosition(centerX, centerY, radius, avoidFields);
+  meteorStrikes.push(new MeteorStrike(adj.x, adj.y, radius, delay, dmg));
+
+  // Unique item hooks (e.g., Pyromancer's Revenge via bonuses.uniqueAbility)
+  const weaponAbility = player?.equip?.weapon?.bonuses?.uniqueAbility;
+  if (weaponAbility?.onMeteorCast) {
+    const spawnStrike = (x, y, r, dly, damageVal) => {
+      const alt = adjustAoEPosition(x, y, r, avoidFields);
+      meteorStrikes.push(new MeteorStrike(alt.x, alt.y, r, dly, damageVal));
+    };
+    weaponAbility.onMeteorCast({
+      centerX,
+      centerY,
+      radius,
+      delay,
+      dmg,
+      spawnStrike
+    });
+  }
 }
 
 // ======================================================
@@ -405,7 +443,7 @@ export class QuagmireField {
   }
 }
 
-export function castQuagmire(player, quagmires, nearestFn) {
+export function castQuagmire(player, quagmires, nearestFn, avoidMeteors = []) {
   const level = getEffectiveSkillLevel(player, 'Quagmire');
   if (level <= 0) return;
 
@@ -425,6 +463,7 @@ export function castQuagmire(player, quagmires, nearestFn) {
     dmg = player.addSkillBonusDamage('Quagmire', dmg);
   }
 
-  const field = new QuagmireField(cx, cy, radius, 300, dmg, fireVuln);
+  const adj = adjustAoEPosition(cx, cy, radius, avoidMeteors);
+  const field = new QuagmireField(adj.x, adj.y, radius, 300, dmg, fireVuln);
   quagmires.push(field);
 }

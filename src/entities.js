@@ -130,7 +130,8 @@ export class Player {
   }
 
   getMoveSpeed(){
-    let ms = 2.4 + this.stats.agi*0.04;
+    // Base movement speed; Agility no longer increases move speed
+    let ms = 2.4;
     for (const slot in this.equip){
       const it = this.equip[slot];
       if (!it) continue;
@@ -190,6 +191,18 @@ export class Player {
       if (it.bonuses?.critDamage) cd += it.bonuses.critDamage;
     }
     return cd;
+  }
+
+  getDefense(){
+    let def = 0;
+    if (this.equip){
+      for (const slot in this.equip){
+        const it = this.equip[slot];
+        if (!it) continue;
+        if (it.bonuses?.defense) def += it.bonuses.defense;
+      }
+    }
+    return def;
   }
 
   getSkillBonusLevel(skillKey){

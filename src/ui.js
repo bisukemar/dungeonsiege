@@ -1,4 +1,5 @@
 import { SKILL_DB } from './databases/skillDB.js';
+import { PLAYER_BASE_HP, HP_PER_VIT } from './constants.js';
 import { ITEMS_DB } from './databases/itemDB.js';
 
 // Human-friendly names for equipment slots
@@ -13,6 +14,35 @@ const SLOT_LABEL = {
   accR: 'Accessory (R)'
 };
 const itemSpriteCache = new Map();
+const STANDARD_PRICE = {
+  Common: 60,
+  Uncommon: 130,
+  Rare: 250,
+  Legendary: 750,
+  Unique: 1000
+};
+
+function getStandardPrice(item){
+  if (!item) return STANDARD_PRICE.Common;
+  const r = item.rarity || 'Common';
+  if (STANDARD_PRICE.hasOwnProperty(r)) return STANDARD_PRICE[r];
+  return item.price || STANDARD_PRICE.Common;
+}
+const RARITY_SHIMMER_STYLE_ID = 'rarity-shimmer-style';
+
+function ensureRarityShimmerStyle(){
+  if (!document || document.getElementById(RARITY_SHIMMER_STYLE_ID)) return;
+  const style = document.createElement('style');
+  style.id = RARITY_SHIMMER_STYLE_ID;
+  style.textContent = `
+    @keyframes rarityShimmer {
+      0% { background-position: 50% 50%, 50% 50%; background-size: 200% 200%, 140% 140%; filter: brightness(1); }
+      50% { background-position: 40% 60%, 60% 40%; background-size: 230% 230%, 180% 180%; filter: brightness(1.08); }
+      100% { background-position: 50% 50%, 50% 50%; background-size: 200% 200%, 140% 140%; filter: brightness(1); }
+    }
+  `;
+  document.head.appendChild(style);
+}
 
 function describeItemShort(item){
   if (!item || !item.bonuses) return '';
@@ -55,7 +85,30 @@ function makeItemIcon(item){
   box.style.width = '42px';
   box.style.height = '42px';
   box.style.borderRadius = '.45rem';
-  box.style.background = 'linear-gradient(180deg, #fefefe 0%, #e5edfb 100%)';
+  const rarity = (item && item.rarity) || 'Common';
+  const rarityBg = rarity === 'Uncommon'
+    ? 'linear-gradient(180deg, #ecfdf3 0%, #d1fae5 100%)'
+    : rarity === 'Rare'
+    ? 'linear-gradient(180deg, #eef2ff 0%, #dfe3ff 100%)'
+    : rarity === 'Legendary'
+    ? 'linear-gradient(135deg, #fef3c7 0%, #fcd34d 45%, #fbbf24 50%, #fcd34d 55%, #fef3c7 100%)'
+    : rarity === 'Unique'
+    ? 'linear-gradient(135deg, #fce7ef 0%, #fbcfdc 40%, #f8b9cb 50%, #fbcfdc 60%, #fce7ef 100%)'
+    : 'linear-gradient(180deg, #fefefe 0%, #e5edfb 100%)';
+  // overlay burst for legendary/unique
+  if (rarity === 'Legendary' || rarity === 'Unique') {
+    const burst = 'radial-gradient(circle at 50% 50%, rgba(255,255,255,0.35), rgba(255,255,255,0) 60%)';
+    box.style.backgroundImage = `${rarityBg}, ${burst}`;
+    box.style.backgroundBlendMode = 'screen';
+  } else {
+    box.style.background = rarityBg;
+  }
+  // Animate Legendary/Unique backgrounds
+  if (rarity === 'Legendary' || rarity === 'Unique') {
+    ensureRarityShimmerStyle();
+    box.style.backgroundSize = '240% 240%, 200% 200%';
+    box.style.animation = 'rarityShimmer 2.6s ease-in-out infinite';
+  }
   box.style.border = '1px dashed #b8cff1';
   box.style.display = 'flex';
   box.style.alignItems = 'center';
@@ -441,7 +494,11 @@ export function makeOverlay(doc, player, onClose, opts = {}){
     { key:'moveSpeed', label:'Move Speed' },
     { key:'attackSpeed', label:'Attack Speed' },
     { key:'pickupRadius', label:'Pickup Radius' },
-    { key:'defense', label:'Defense' }
+    { key:'defense', label:'Defense' },
+    { key:'cdr', label:'Cooldown Reduction' },
+    { key:'hpRegen', label:'HP Regen' },
+    { key:'bonusHp', label:'Bonus HP (Items/Skills)' },
+    { key:'skillRange', label:'Current Skill Range' }
   ];
 
   statDescriptors.forEach(({ key, label }) => {
@@ -1129,8 +1186,9 @@ export function makeOverlay(doc, player, onClose, opts = {}){
     ITEMS_DB.forEach((item) => {
       if (!item) return;
       const rarity = item.rarity || 'Common';
-      if (item.shopAvailable === false) return;
-      if (!['Common','Uncommon'].includes(rarity)) return;
+      if (!player.adminMode && item.shopAvailable === false) return;
+      // Non-admin: show only Common items; Admin: show everything
+      if (!player.adminMode && rarity !== 'Common') return;
       const slot = item.slot || '';
       const cat = slot === 'head' ? 'Headgear'
         : slot === 'armor' ? 'Armor'
@@ -1146,12 +1204,13 @@ export function makeOverlay(doc, player, onClose, opts = {}){
       row.style.display = 'grid';
       row.style.gridTemplateColumns = '46px minmax(0,2.1fr) auto auto';
       row.style.columnGap = '.5rem';
-      row.style.alignItems = 'center';
+      row.style.alignItems = 'flex-start';
       row.style.padding = '.45rem .5rem';
       row.style.borderRadius = '.65rem';
       row.style.background = 'rgba(255,255,255,0.95)';
       row.style.border = '1px solid #b8cff1';
-      row.style.minHeight = '72px';
+      row.style.minHeight = '86px';
+      row.style.height = 'auto';
 
       row.appendChild(makeItemIcon(item));
 
@@ -1182,12 +1241,14 @@ export function makeOverlay(doc, player, onClose, opts = {}){
       const priceSpan = doc.createElement('span');
       priceSpan.style.fontSize = '.78rem';
       priceSpan.style.opacity = '0.9';
-      const price = item.price || 100;
+      const price = getStandardPrice(item);
       priceSpan.textContent = `${price}g`;
       top.appendChild(priceSpan);
 
       const typeSpan = doc.createElement('span');
-      typeSpan.textContent = item.slot ? (SLOT_LABEL[item.slot] || item.slot) : 'Item';
+      const slotLabel = item.slot ? (SLOT_LABEL[item.slot] || item.slot) : 'Item';
+      const rarityLabel = rarity || 'Common';
+      typeSpan.textContent = `${rarityLabel} ${slotLabel}`;
       typeSpan.style.fontSize = '.7rem';
       typeSpan.style.opacity = '0.78';
       main.appendChild(typeSpan);
@@ -1217,7 +1278,7 @@ export function makeOverlay(doc, player, onClose, opts = {}){
 
       btn.onclick = (ev) => {
         ev.stopPropagation();
-        const cost = item.price || 100;
+        const cost = getStandardPrice(item);
         const currentGold = player.gold || 0;
         if (currentGold < cost) return;
         player.gold = currentGold - cost;
@@ -1307,23 +1368,28 @@ export function makeOverlay(doc, player, onClose, opts = {}){
         '#1f2937';
       top.appendChild(name);
 
-      const base = it.price || 100;
+      const typeSpan = document.createElement('span');
+      const slotLabel = it.slot ? (SLOT_LABEL[it.slot] || it.slot) : 'Item';
+      const rarityLabel = rarity || 'Common';
+      typeSpan.textContent = `${rarityLabel} ${slotLabel}`;
+      typeSpan.style.fontSize = '.7rem';
+      typeSpan.style.opacity = '0.78';
+      main.appendChild(typeSpan);
+
+      // Sell view: show sell price
+      const base = getStandardPrice(it);
       const sellPrice = Math.floor(base * 0.5);
-      const priceSpan = doc.createElement('span');
+      const priceSpan = document.createElement('span');
       priceSpan.style.fontSize = '.78rem';
       priceSpan.style.opacity = '0.9';
       priceSpan.textContent = `${sellPrice}g`;
       top.appendChild(priceSpan);
 
-      const typeSpan = doc.createElement('span');
-      typeSpan.textContent = it.slot ? (SLOT_LABEL[it.slot] || it.slot) : 'Item';
-      typeSpan.style.fontSize = '.7rem';
-      typeSpan.style.opacity = '0.78';
-      main.appendChild(typeSpan);
-
       const descSpan = doc.createElement('div');
       descSpan.style.fontSize = '.7rem';
       descSpan.style.opacity = '0.8';
+      descSpan.style.lineHeight = '1.35';
+      descSpan.style.wordBreak = 'break-word';
       descSpan.textContent = it.desc || describeItemShort(it);
       main.appendChild(descSpan);
 
@@ -1333,7 +1399,7 @@ export function makeOverlay(doc, player, onClose, opts = {}){
       btnBox.style.justifyContent = 'flex-end';
       row.appendChild(btnBox);
 
-      const btn = doc.createElement('button');
+      const btn = document.createElement('button');
       btn.textContent = 'Sell';
       btn.style.borderRadius = '999px';
       btn.style.border = '1px solid rgba(148,163,184,0.9)';
@@ -1350,7 +1416,11 @@ export function makeOverlay(doc, player, onClose, opts = {}){
         player.inventory.splice(idx, 1);
         player.gold = (player.gold || 0) + sellPrice;
         showGoldChange(btn, sellPrice);
-        setTimeout(() => updateAll(), 10);
+        setTimeout(() => {
+          renderShopSell();
+          renderInventoryPanel();
+          updateAll();
+        }, 10);
       };
 
       btnBox.appendChild(btn);
@@ -1392,12 +1462,13 @@ export function makeOverlay(doc, player, onClose, opts = {}){
       row.style.display = 'grid';
       row.style.gridTemplateColumns = '46px minmax(0,2.1fr) auto auto';
       row.style.columnGap = '.5rem';
-      row.style.alignItems = 'center';
+      row.style.alignItems = 'flex-start';
       row.style.padding = '.45rem .5rem';
       row.style.borderRadius = '.65rem';
       row.style.background = 'rgba(255,255,255,0.95)';
       row.style.border = '1px solid #b8cff1';
-      row.style.minHeight = '72px';
+      row.style.minHeight = '86px';
+      row.style.height = 'auto';
       invList.appendChild(row);
 
       row.appendChild(makeItemIcon(it));
@@ -1428,7 +1499,9 @@ export function makeOverlay(doc, player, onClose, opts = {}){
       top.appendChild(name);
 
       const slotSpan = doc.createElement('span');
-      slotSpan.textContent = it.slot ? (SLOT_LABEL[it.slot] || it.slot) : 'Item';
+      const rarityLabel = rarity || 'Common';
+      const slotLabel = it.slot ? (SLOT_LABEL[it.slot] || it.slot) : 'Item';
+      slotSpan.textContent = `${rarityLabel} ${slotLabel}`;
       slotSpan.style.fontSize = '.7rem';
       slotSpan.style.opacity = '0.78';
       main.appendChild(slotSpan);
@@ -1436,6 +1509,8 @@ export function makeOverlay(doc, player, onClose, opts = {}){
       const descSpan = doc.createElement('div');
       descSpan.style.fontSize = '.7rem';
       descSpan.style.opacity = '0.8';
+      descSpan.style.lineHeight = '1.35';
+      descSpan.style.wordBreak = 'break-word';
       descSpan.textContent = it.desc || describeItemShort(it);
       main.appendChild(descSpan);
 
@@ -1469,23 +1544,6 @@ export function makeOverlay(doc, player, onClose, opts = {}){
         updateAll();
       };
 
-      const dropBtn = doc.createElement('button');
-      dropBtn.textContent = 'Drop';
-      dropBtn.style.fontSize = '.75rem';
-      dropBtn.style.padding = '.2rem .5rem';
-      dropBtn.style.borderRadius = '.3rem';
-      dropBtn.style.border = '1px solid rgba(255,255,255,0.25)';
-      dropBtn.style.background = 'transparent';
-      dropBtn.style.color = '#1b2d4b';
-      dropBtn.style.cursor = 'pointer';
-      btnBox.appendChild(dropBtn);
-
-      dropBtn.onclick = (ev) => {
-        ev.stopPropagation();
-        if (!player.inventory || !player.inventory[idx]) return;
-        player.inventory.splice(idx, 1);
-        updateAll();
-      };
     });
   }
 
@@ -1790,7 +1848,7 @@ export function makeOverlay(doc, player, onClose, opts = {}){
     const basePickup = (player.r || 0) + 10;
     const extraPerLuck = screenRadius / 99;
     const pickupRadius = Math.min(screenRadius, basePickup + luck * extraPerLuck);
-    const defense = player.defense || 0;
+    const defense = typeof player.getDefense === 'function' ? player.getDefense() : (player.defense || 0);
 
     // helper to format base + bonus with colored bonus
     const formatBaseBonus = (base, total, suffix='') => {
@@ -1816,8 +1874,8 @@ export function makeOverlay(doc, player, onClose, opts = {}){
         (bonusCd > 0 ? ` <span style="color:#16a34a;">(+${bonusCd.toFixed(2)}x)</span>` : '');
     }
 
-    // Move speed: base from AGI, bonus from gear
-    const baseMs = Math.min(5.5, Math.max(1.2, 2.4 + (player.stats?.agi || 0) * 0.04));
+    // Move speed: fixed base; only gear bonuses apply
+    const baseMs = 2.4;
     const bonusMs = Math.max(0, ms - baseMs);
     if (statRows.moveSpeed) {
       statRows.moveSpeed.innerHTML = `${baseMs.toFixed(2)} u/f` +
@@ -1827,9 +1885,56 @@ export function makeOverlay(doc, player, onClose, opts = {}){
     if (statRows.attackSpeed) statRows.attackSpeed.textContent = `${atkSpd.toFixed(2)} /s`;
     if (statRows.pickupRadius) statRows.pickupRadius.textContent = `${Math.round(pickupRadius)} px`;
     if (statRows.defense) statRows.defense.textContent = `${defense}`;
-    if (statRows.attackSpeed) statRows.attackSpeed.textContent = `${atkSpd.toFixed(2)} /s`;
-    if (statRows.pickupRadius) statRows.pickupRadius.textContent = `${Math.round(pickupRadius)} px`;
-    if (statRows.defense) statRows.defense.textContent = `${defense}`;
+
+    // Cooldown Reduction (flat cooldown reduction shown as frames)
+    if (statRows.cdr) {
+      const flatCd = player.equip
+        ? Object.values(player.equip).reduce((acc, it) => acc + (it?.bonuses?.cooldownFlat || 0), 0)
+        : 0;
+      const atkSpeedBonus = player.equip
+        ? Object.values(player.equip).reduce((acc, it) => acc + (it?.bonuses?.attackSpeed || 0), 0)
+        : 0;
+      const totalCdFrames = flatCd - atkSpeedBonus; // atkSpeed lowers cooldown
+      statRows.cdr.textContent = totalCdFrames !== 0 ? `${totalCdFrames} frames` : '0';
+    }
+
+    // HP Regen: show per second from skill/gear
+    if (statRows.hpRegen) {
+      const regenLevel = typeof player.getEffectiveSkillLevel === 'function'
+        ? player.getEffectiveSkillLevel('HPRegen')
+        : (player.skillLevel?.HPRegen || 0);
+      const regenFromSkill = regenLevel > 0 ? (2 + regenLevel * 3) * (60 / 360) : 0; // tick every 360f
+      const regenFromGear = player.equip
+        ? Object.values(player.equip).reduce((acc, it) => acc + (it?.bonuses?.hp || 0), 0)
+        : 0;
+      const totalRegenPerSec = regenFromSkill + regenFromGear * 0.02; // assume +hp gives small passive regen
+      statRows.hpRegen.textContent = `${totalRegenPerSec.toFixed(2)} /s`;
+    }
+
+    // Bonus HP from items and skills
+    if (statRows.bonusHp) {
+      const baseHp = PLAYER_BASE_HP + (player.stats?.vit || 0) * HP_PER_VIT;
+      let bonusHp = 0;
+      if (player.equip) {
+        Object.values(player.equip).forEach((it) => {
+          if (!it) return;
+          if (it.bonuses?.maxHp) bonusHp += it.bonuses.maxHp;
+          if (it.bonuses?.vit) bonusHp += it.bonuses.vit * HP_PER_VIT;
+        });
+      }
+      const fromSkills = 0; // placeholder if future skills add HP
+      bonusHp += fromSkills;
+      statRows.bonusHp.textContent = `${Math.round(bonusHp)} (of ${Math.round(baseHp + bonusHp)})`;
+    }
+
+    // Current Skill Range: use nearest active skill; fallback to arrow/fireball average
+    if (statRows.skillRange) {
+      const dex = player.stats?.dex || 0;
+      const rangeArrow = 240 + Math.min(40, dex) * 12; // matches computeProjectileLifeForDex baseRange
+      const rangeFire = 200 + Math.min(40, dex) * 12;
+      const avgRange = Math.round((rangeArrow + rangeFire) / 2);
+      statRows.skillRange.textContent = `${avgRange} px`;
+    }
 
     // attributes
     if (!player.stats) player.stats = { str:0, agi:0, vit:0, int:0, dex:0, luck:0 };
