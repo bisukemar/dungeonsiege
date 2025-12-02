@@ -12,14 +12,17 @@ import {
   castFireball,
   castArrow,
   castArrowShower,
+  castArrowStorm,
   castIceWave,
   castBash,
   castMagnum,
   castMeteorStorm,
   MeteorStrike,
+  ArrowStormStrike,
   castQuagmire,
   castChainLightning,
-  castLightningBolt
+  castLightningBolt,
+  castPiercingStrike
 } from './skills.js';
 import {
   spawnMonsterForRound,
@@ -126,10 +129,13 @@ function handleLevelUp() {
     if (!player.unlocks[key]) player.unlocks[key] = true;
   }
 
-  if (L >= 2) unlock('Fireball');
-  if (L >= 3) unlock('Bash');
-  if (L >= 4) {
+  if (L >= 1) {
+    unlock('Fireball');
+    unlock('Bash');
     unlock('Arrow');
+    unlock('LightningBolt');
+  }
+  if (L >= 4) {
     unlock('Toughness');
     unlock('Haste');
     unlock('Precision');
@@ -144,8 +150,12 @@ function handleLevelUp() {
     unlock('ArrowShower');
     unlock('ChainLightning');
   }
-  if (L >= 7) unlock('Quagmire');
+  if (L >= 7) {
+    unlock('Quagmire');
+    unlock('ArrowStorm');
+  }
   if (L >= 8) unlock('Meteor');
+  if (L >= 5) unlock('PiercingStrike');
 
   openOverlay('Stats');
 }
@@ -248,7 +258,7 @@ function drawMonster(ctx, mon, moved, paused=false){
 arrowSprite.img.onload = () => {
   arrowSprite.ready = true;
 };
-arrowSprite.img.src = 'assets/arrow01.png';
+arrowSprite.img.src = 'assets/arrow02.png';
 
 chainLightningSprite.img.onload = () => {
   chainLightningSprite.frameH = chainLightningSprite.img.height;
@@ -880,9 +890,11 @@ function restartToTitle() {
   monsterProjectiles.length = 0;
   iceWaves.length = 0;
   bashWaves.length = 0;
+  piercingWaves.length = 0;
   magnumWaves.length = 0;
   meleeArcs.length = 0;
   meteorStrikes.length = 0;
+  arrowStorms.length = 0;
   quagmires.length = 0;
   chainLightnings.length = 0;
   lightningBolts.length = 0;
@@ -1181,6 +1193,7 @@ titleStartBtn.onclick = () => {
   player.unlocks.Fireball = true;
   player.unlocks.Bash = true;
   player.unlocks.LightningBolt = true;
+  player.unlocks.Arrow = true;
 
   // Make the in-game top bar visible now (Character, Shop, etc.)
   if (topBar) topBar.style.display = 'flex';
@@ -1832,9 +1845,11 @@ const bossProjectiles = [];
 const monsterProjectiles = [];
 const iceWaves = [];
 const bashWaves = [];
+const piercingWaves = [];
 const magnumWaves = [];
 const meleeArcs = [];
 const meteorStrikes = [];
+const arrowStorms = [];
 const quagmires = [];
 const chainLightnings = [];
 const lightningBolts = [];
@@ -2378,6 +2393,9 @@ function loop() {
         useSkill('ArrowShower', 320, () =>
           castArrowShower(player, playerProjectiles, nearestWithFacing)
         );
+        useSkill('ArrowStorm', 260, () =>
+          castArrowStorm(player, arrowStorms, nearestWithFacing, quagmires)
+        );
         useSkill('Ice', 120, () => {
           const t = nearestWithFacing(player.x, player.y);
           if (!t) return;
@@ -2404,7 +2422,15 @@ function loop() {
           const ang = Math.atan2(t.y - player.y, t.x - player.x);
           player.dx = Math.cos(ang);
           player.dy = Math.sin(ang);
-          castBash(player, bashWaves);
+          castBash(player, bashWaves, t);
+        });
+        useSkill('PiercingStrike', 90, () => {
+          const t = nearestWithFacing(player.x, player.y);
+          if (!t) return;
+          const ang = Math.atan2(t.y - player.y, t.x - player.x);
+          player.dx = Math.cos(ang);
+          player.dy = Math.sin(ang);
+          castPiercingStrike(player, piercingWaves);
         });
         useSkill('Magnum', 180, () => castMagnum(player, magnumWaves));
         useSkill('Quagmire', 260, () =>
@@ -2476,9 +2502,24 @@ function loop() {
       if (w.hits(m)) {
         hitTarget(m, w.dmg / 2, 'NEUTRAL');
         m.slowTimer = Math.max(m.slowTimer || 0, 20);
+        w.hitDone = true;
+        w.life = 0;
       }
     });
     if (w.life <= 0) bashWaves.splice(i, 1);
+  }
+  
+  for (let i = piercingWaves.length - 1; i >= 0; i--) {
+    const w = piercingWaves[i];
+    w.update();
+    currentMonsters.forEach((m) => {
+      if (w.hits(m)) {
+        w.hitSet.add(m);
+        hitTarget(m, w.dmg, 'NEUTRAL');
+        m.slowTimer = Math.max(m.slowTimer || 0, 20);
+      }
+    });
+    if (w.life <= 0) piercingWaves.splice(i, 1);
   }
 
   for (let i = magnumWaves.length - 1; i >= 0; i--) {
@@ -2490,6 +2531,31 @@ function loop() {
       }
     });
     if (w.life <= 0) magnumWaves.splice(i, 1);
+  }
+  
+  for (let i = arrowStorms.length - 1; i >= 0; i--) {
+    const s = arrowStorms[i];
+    s.update();
+    if (s.delay <= 0 && s.pendingHit) {
+      // choose an impact point within the circle for visuals
+      const ang = Math.random() * Math.PI * 2;
+      const dist = Math.random() * s.radius * 0.8;
+      const ix = s.x + Math.cos(ang) * dist;
+      const iy = s.y + Math.sin(ang) * dist;
+      s.effects.push({ x: ix, y: iy, life: 14, maxLife: 14 });
+      s.pendingHit = false;
+
+      currentMonsters.forEach((m) => {
+        if (s.hits(m)) {
+          hitTarget(m, s.dmg, 'NEUTRAL');
+        }
+      });
+    }
+    s.effects.forEach((fx) => fx.life--);
+    s.effects = s.effects.filter((fx) => fx.life > 0);
+    if (s.isDone()) {
+      arrowStorms.splice(i, 1);
+    }
   }
 	
   for (let i = quagmires.length - 1; i >= 0; i--) {
@@ -2927,6 +2993,21 @@ function tryBossSkills(m){
     ctx.lineWidth = w.thickness || 5;
     ctx.stroke();
   });
+  
+  piercingWaves.forEach((w) => {
+    const baseAngle = Math.atan2(w.dirY, w.dirX);
+    ctx.beginPath();
+    ctx.arc(
+      w.x,
+      w.y,
+      w.radius,
+      baseAngle - w.span,
+      baseAngle + w.span
+    );
+    ctx.strokeStyle = 'rgba(129, 199, 132, 0.9)';
+    ctx.lineWidth = w.thickness || 5;
+    ctx.stroke();
+  });
 
   meleeArcs.forEach((w) => {
     const baseAngle = Math.atan2(w.dy, w.dx);
@@ -2949,6 +3030,54 @@ function tryBossSkills(m){
     ctx.strokeStyle = 'rgba(255, 138, 101, 0.9)';
     ctx.lineWidth = w.thickness || 6;
     ctx.stroke();
+  });
+  
+  arrowStorms.forEach((s) => {
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.radius, 0, Math.PI * 2);
+    if (s.delay > 0) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([8, 6]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    } else {
+      ctx.fillStyle = 'rgba(197, 225, 255, 0.35)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(144, 202, 249, 0.9)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      s.effects.forEach((fx) => {
+        const alpha = Math.max(0, fx.life / (fx.maxLife || fx.life || 1));
+        const arrowLen = 32;
+        ctx.save();
+        ctx.globalAlpha = 0.5 + alpha * 0.5;
+        // draw arrow sprite falling from above the impact point
+        if (arrowSprite.ready) {
+          const h = arrowSprite.img.height;
+          const w = arrowSprite.img.width;
+          ctx.translate(fx.x, fx.y - arrowLen);
+          ctx.drawImage(arrowSprite.img, -w / 2, -h - 12, w, h);
+        } else {
+          ctx.beginPath();
+          ctx.moveTo(fx.x, fx.y - arrowLen - 18);
+          ctx.lineTo(fx.x, fx.y - 6);
+          ctx.strokeStyle = 'rgba(33, 150, 243, 0.9)';
+          ctx.lineWidth = 3;
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(fx.x, fx.y);
+          ctx.lineTo(fx.x - 6, fx.y - 10);
+          ctx.lineTo(fx.x + 6, fx.y - 10);
+          ctx.closePath();
+          ctx.fillStyle = 'rgba(25, 118, 210, 0.95)';
+          ctx.fill();
+        }
+        ctx.restore();
+      });
+    }
   });
 	
   quagmires.forEach((f) => {

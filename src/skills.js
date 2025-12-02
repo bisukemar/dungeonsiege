@@ -280,6 +280,65 @@ export function castIceWave(player, iceArr) {
 //  BASH WAVE
 // ======================================================
 export class BashWave {
+  constructor(x, y, dirX, dirY, dmg, target, rangeScale = 1) {
+    this.x = x;
+    this.y = y;
+    const len = Math.hypot(dirX, dirY) || 1;
+    this.dirX = dirX / len;
+    this.dirY = dirY / len;
+
+    this.radius = 35 * rangeScale;
+    this.growth = 3 * rangeScale;
+
+    this.dmg = dmg;
+    this.life = 16;
+    this.element = 'NEUTRAL';
+    this.span = 0.45;     // narrow cone
+    this.thickness = 5;
+    this.target = target || null;
+    this.hitDone = false;
+  }
+
+  update() {
+    this.radius += this.growth;
+    this.life--;
+  }
+
+  hits(m) {
+    if (this.hitDone) return false;
+    if (this.target && m !== this.target) return false;
+    if (this.target && this.target.hp <= 0) return false;
+    const a = Math.atan2(this.dirY, this.dirX);
+    const mx = m.x - this.x;
+    const my = m.y - this.y;
+    const dist = Math.hypot(mx, my);
+    if (dist > this.radius + m.r) return false;
+    const ang = Math.atan2(my, mx);
+    return Math.abs(ang - a) < this.span;
+  }
+}
+
+export function castBash(player, bashArr, target = null) {
+  const angle = Math.atan2(player.dy || 0, player.dx || 1);
+  const dx = Math.cos(angle);
+  const dy = Math.sin(angle);
+
+  const level = getEffectiveSkillLevel(player, 'Bash');
+  let dmg = player.stats.str * 2.2 + level;
+  if (typeof player.addSkillBonusDamage === 'function') {
+    dmg = player.addSkillBonusDamage('Bash', dmg);
+  }
+
+  const dex = player.stats.dex || 0;
+  const rangeScale = 1 + dex * 0.04;
+
+  bashArr.push(new BashWave(player.x, player.y, dx, dy, dmg, target, rangeScale));
+}
+
+// ======================================================
+//  PIERCING STRIKE (MULTI-HIT ARC)
+// ======================================================
+export class PiercingStrikeWave {
   constructor(x, y, dirX, dirY, dmg, rangeScale = 1) {
     this.x = x;
     this.y = y;
@@ -295,6 +354,7 @@ export class BashWave {
     this.element = 'NEUTRAL';
     this.span = 0.45;     // narrow cone
     this.thickness = 5;
+    this.hitSet = new Set();
   }
 
   update() {
@@ -303,6 +363,7 @@ export class BashWave {
   }
 
   hits(m) {
+    if (this.hitSet.has(m)) return false;
     const a = Math.atan2(this.dirY, this.dirX);
     const mx = m.x - this.x;
     const my = m.y - this.y;
@@ -313,21 +374,21 @@ export class BashWave {
   }
 }
 
-export function castBash(player, bashArr) {
+export function castPiercingStrike(player, pierceArr) {
   const angle = Math.atan2(player.dy || 0, player.dx || 1);
   const dx = Math.cos(angle);
   const dy = Math.sin(angle);
 
-  const level = getEffectiveSkillLevel(player, 'Bash');
-  let dmg = player.stats.str * 2.2 + level;
+  const level = getEffectiveSkillLevel(player, 'PiercingStrike');
+  let dmg = player.stats.str * 2.2 + level * 1.5;
   if (typeof player.addSkillBonusDamage === 'function') {
-    dmg = player.addSkillBonusDamage('Bash', dmg);
+    dmg = player.addSkillBonusDamage('PiercingStrike', dmg);
   }
 
   const dex = player.stats.dex || 0;
   const rangeScale = 1 + dex * 0.04;
 
-  bashArr.push(new BashWave(player.x, player.y, dx, dy, dmg, rangeScale));
+  pierceArr.push(new PiercingStrikeWave(player.x, player.y, dx, dy, dmg, rangeScale));
 }
 
 // ======================================================
@@ -405,6 +466,81 @@ export class MeteorStrike {
   }
 }
 
+// ======================================================
+//  ARROW STORM (AOE MULTI-HIT)
+// ======================================================
+export class ArrowStormStrike {
+  constructor(x, y, radius, delayFrames, dmg, hits) {
+    this.x = x;
+    this.y = y;
+    this.radius = radius;
+    this.delay = delayFrames;
+    this.life = 22;
+    this.dmg = dmg;
+    this.element = 'NEUTRAL';
+    this.hitsRemaining = hits;
+    this.hitTimer = 0;
+    this.pendingHit = false;
+    this.effects = [];
+  }
+
+  update() {
+    if (this.delay > 0) {
+      this.delay--;
+      return;
+    }
+    if (this.hitsRemaining > 0) {
+      if (this.hitTimer <= 0) {
+        this.hitTimer = 8;
+        this.hitsRemaining--;
+        this.pendingHit = true;
+      } else {
+        this.hitTimer--;
+      }
+    }
+    if (this.life > 0) this.life--;
+  }
+
+  isDone() {
+    return this.delay <= 0 && this.life <= 0 && this.hitsRemaining <= 0 && !this.pendingHit;
+  }
+
+  hits(m) {
+    if (this.delay > 0) return false;
+    const dx = m.x - this.x;
+    const dy = m.y - this.y;
+    const dist = Math.hypot(dx, dy);
+    return dist < this.radius + m.r;
+  }
+}
+
+export function castArrowStorm(player, arrowStorms, nearestFn, avoidFields = []) {
+  const level = getEffectiveSkillLevel(player, 'ArrowStorm');
+  if (level <= 0) return;
+
+  const target = nearestFn(player.x, player.y);
+  // fallback toward facing
+  const fallbackX = player.x + (player.dx || 1) * 140;
+  const fallbackY = player.y + (player.dy || 0) * 60;
+  const cx = target ? target.x : fallbackX;
+  const cy = target ? target.y : fallbackY;
+
+  const baseRadius = 70;
+  const radius = baseRadius + (level - 1) * 6;
+
+  let dmg = player.stats.dex * 1.5 + level * 2;
+  if (typeof player.addSkillBonusDamage === 'function') {
+    dmg = player.addSkillBonusDamage('ArrowStorm', dmg);
+  }
+
+  const hits = Math.min(3, 1 + Math.floor((level - 1) / 3));
+  const def = SKILL_DB.ArrowStorm || {};
+  const baseDelay = def.baseDelay || 60;
+  const delay = Math.max(24, baseDelay - (level - 1) * 4);
+
+  const adj = adjustAoEPosition(cx, cy, radius, avoidFields);
+  arrowStorms.push(new ArrowStormStrike(adj.x, adj.y, radius, delay, dmg, hits));
+}
 // ======================================================
 //  QUAGMIRE (PERSISTENT DoT FIELD)
 // ======================================================

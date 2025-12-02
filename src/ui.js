@@ -1614,7 +1614,19 @@ export function makeOverlay(doc, player, onClose, opts = {}){
     skillsPtsEl.textContent = `Skill Points: ${player.skillPoints || 0}`;
     skillList.innerHTML = '';
 
-    const entries = Object.entries(SKILL_DB);
+    const entries = Object.entries(SKILL_DB).sort((a, b) => {
+      const rank = (s) => {
+        const t = s?.tier;
+        if (t === 'I' || t === 1) return 0;
+        if (t === 'II' || t === 2) return 1;
+        if (t === 'III' || t === 3) return 2;
+        return 99;
+      };
+      const ra = rank(a[1]);
+      const rb = rank(b[1]);
+      if (ra !== rb) return ra - rb;
+      return (a[1]?.name || a[0]).localeCompare(b[1]?.name || b[0]);
+    });
 
     entries.forEach(([key, skill]) => {
       const tabCat = getSkillCategoryTab(key, skill);
@@ -1682,7 +1694,8 @@ export function makeOverlay(doc, player, onClose, opts = {}){
 
       const elem = skill.element || 'NEUTRAL';
       const elemTag = document.createElement('span');
-      elemTag.textContent = elem;
+      const tierSuffix = skill.tier ? ` ${skill.tier}` : '';
+      elemTag.textContent = `${elem}${tierSuffix}`;
       elemTag.style.fontWeight = '700';
       elemTag.style.padding = '.06rem .55rem';
       elemTag.style.borderRadius = '999px';
