@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Dungeon Siege: An Arcane Survival</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#ffffff" />
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="icon" href="./assets/DS-192x192.png" />
+  <link rel="apple-touch-icon" href="./assets/DS-192x192.png" />
+  <style>
+    * { box-sizing: border-box; }
+
+    :root {
+      --ro-ink: #1b2d4b;
+      --ro-ink-strong: #15243d;
+      --ro-soft: #e8f1fb;
+      --ro-panel: #d8e6f7;
+      --ro-panel-edge: #7ea7d8;
+      --ro-accent: #d1a85c;
+      --ro-button: #b9d6f6;
+      --ro-button-ink: #143165;
+      --ro-shadow: 0 18px 60px rgba(19, 33, 68, 0.35);
+    }
+
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: radial-gradient(circle at 25% 20%, #f7fbff, #c4dbf5 55%);
+      color: var(--ro-ink);
+      font-family: "Trebuchet MS", "Segoe UI", system-ui, -apple-system, sans-serif;
+    }
+
+    canvas#game {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      background: linear-gradient(180deg, #e6f0fb 0%, #c9dcf6 40%, #a6c2e8 100%);
+    }
+
+    #ui {
+      position: fixed;
+      top: calc(10px + env(safe-area-inset-top, 0px));
+      left: calc(10px + env(safe-area-inset-left, 0px));
+      padding: 4px 6px;
+      border-radius: 8px;
+      background: transparent;
+      font-family: "Andale Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      white-space: pre;
+      user-select: none;
+      font-size: 0.9rem;
+      color: #fdfdfd;
+      text-shadow: 0 0 10px rgba(0, 0, 0, 0.65);
+      z-index: 120;
+      max-width: calc(100vw - 24px);
+    }
+
+    #msg {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      z-index: 30;
+    }
+
+    .banner {
+      padding: 0.6rem 1rem;
+      border-radius: 12px;
+      border: 1px solid var(--ro-panel-edge);
+      background: linear-gradient(180deg, #ffffff 0%, #dfeaf9 70%);
+      box-shadow: var(--ro-shadow);
+      font-size: 0.9rem;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      color: var(--ro-ink);
+    }
+
+    #pausedText {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 2.2rem;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      text-align: center;
+      color: var(--ro-ink);
+      text-shadow: 0 0 12px rgba(255,255,255,0.9);
+      display: none;
+      pointer-events: none;
+      z-index: 25;
+    }
+
+    /* Top control bar (hidden until game actually starts) */
+    #topBar {
+      position: fixed;
+      top: calc(10px + env(safe-area-inset-top, 0px));
+      right: calc(10px + env(safe-area-inset-right, 0px));
+      display: none; /* shown from main.js after setup */
+      gap: 0.5rem;
+      z-index: 130;
+    }
+
+    #topBar button {
+      padding: 0.35rem 0.85rem;
+      border-radius: 10px;
+      border: 1px solid var(--ro-panel-edge);
+      background: rgba(255,255,255,0.85);
+      color: var(--ro-ink-strong);
+      font-size: 0.86rem;
+      cursor: pointer;
+      box-shadow: 0 3px 12px rgba(13, 31, 64, 0.2);
+    }
+
+    #topBar button:hover {
+      background: linear-gradient(180deg, #ffffff 0%, #d7e8ff 100%);
+      border-color: #9ab9e8;
+    }
+
+    #topBar button#adminBtn {
+      border-color: #d9b56e;
+      background: linear-gradient(180deg, #fff5df 0%, #edd7a0 100%);
+      color: #5c4108;
+    }
+
+    #topBar button#adminBtn:hover {
+      background: linear-gradient(180deg, #fff9e8 0%, #f2dfaf 100%);
+      border-color: #f2cf8a;
+    }
+
+    @media (max-width: 960px) {
+      #ui {
+        font-size: 0.75rem;
+        padding: 6px 8px;
+        left: calc(8px + env(safe-area-inset-left, 0px));
+        top: calc(8px + env(safe-area-inset-top, 0px));
+      }
+      #topBar button {
+        font-size: 0.95rem;
+        padding: 0.4rem 0.9rem;
+      }
+    }
+
+    /* Overlay container (panel content is built by ui.js) */
+    #overlay {
+      position: absolute;
+      inset: 0;
+      display: none;
+      place-items: center;
+      z-index: 40;
+    }
+
+    /* Title Screen */
+    #titleScreen {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+      background: radial-gradient(circle at 15% 20%, #f5faff 0, #d3e5fc 55%);
+    }
+
+    .title-card {
+      padding: 2.3rem 2.6rem 2.4rem;
+      border-radius: 1.35rem;
+      border: 2px solid #7da8d9;
+      background: linear-gradient(180deg, #f9fbff 0%, #dfeaf9 45%, #c8dcf6 100%);
+      box-shadow: var(--ro-shadow);
+      max-width: 460px;
+      width: 92%;
+      text-align: center;
+      color: var(--ro-ink-strong);
+    }
+
+    #titleLogo {
+      max-width: 240px;
+      width: 70%;
+      height: auto;
+      margin-bottom: 0.6rem;
+      filter: drop-shadow(0 4px 12px rgba(6, 20, 51, 0.3));
+    }
+
+    .title-card h1 {
+      margin: 0 0 .4rem;
+      font-size: 2.1rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .title-sub {
+      margin: 0 0 1.4rem;
+      font-size: 0.86rem;
+      letter-spacing: 0.14em;
+      color: #4b638b;
+      text-transform: uppercase;
+    }
+
+    .title-author {
+      margin: -0.6rem 0 1.4rem;
+      font-size: 0.82rem;
+      letter-spacing: 0.08em;
+      color: #7388aa;
+    }
+
+    .title-buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+      margin-bottom: 0.3rem;
+      width: 100%;
+    }
+
+    .title-buttons button {
+      width: 100%;
+      padding: 0.6rem 0.9rem;
+      border-radius: 12px;
+      border: 1px solid #7fa8d7;
+      background: linear-gradient(180deg, #fdfdff 0%, #cde0f8 100%);
+      color: var(--ro-ink-strong);
+      font-size: 0.92rem;
+      font-weight: 700;
+      letter-spacing: 0.11em;
+      text-transform: uppercase;
+      cursor: pointer;
+      box-shadow: 0 6px 12px rgba(21, 44, 90, 0.18);
+    }
+
+    .title-buttons button.secondary {
+      border-color: #7fa8d7;
+      background: linear-gradient(180deg, #fdfdff 0%, #cde0f8 100%);
+      color: var(--ro-ink-strong);
+    }
+
+    .title-buttons button#titleStartBtn {
+      border-color: #d1a85c;
+      background: linear-gradient(180deg, #fff9ea 0%, #f0dfad 100%);
+      color: #5c4108;
+    }
+
+    .title-buttons button:hover {
+      filter: brightness(1.04);
+    }
+
+    /* Options modal */
+    #optionsModal {
+      position: absolute;
+      inset: 0;
+      display: none;
+      place-items: center;
+      background: rgba(12, 27, 58, 0.38);
+      z-index: 60;
+      backdrop-filter: blur(3px);
+    }
+
+    .options-card {
+      width: 460px;
+      max-width: 92%;
+      background: linear-gradient(180deg, #fdfdff 0%, #dfeaf9 50%, #c8dcf6 100%);
+      border: 2px solid #7da8d9;
+      border-radius: 1rem;
+      padding: 1.1rem 1.3rem;
+      box-shadow: var(--ro-shadow);
+      color: var(--ro-ink-strong);
+    }
+
+    .options-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.65rem;
+    }
+
+    /* Name modal has no skip/close button; center the title */
+    #nameModal .options-top {
+      justify-content: center;
+    }
+
+    .options-top h3 {
+      margin: 0;
+      font-size: 1.05rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--ro-ink-strong);
+    }
+
+    .close-btn {
+      border: 1px solid #9ab9e8;
+      background: linear-gradient(180deg, #ffffff 0%, #d7e8ff 100%);
+      color: var(--ro-ink-strong);
+      padding: 0.2rem 0.6rem;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    .close-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+      font-size: 0.95rem;
+    }
+
+    .toggle-row input[type="checkbox"] {
+      width: 1.05rem;
+      height: 1.05rem;
+      accent-color: #d1a85c;
+      cursor: pointer;
+    }
+
+    .about-box {
+      background: linear-gradient(180deg, #fefefe 0%, #e8f1fb 100%);
+      border: 1px solid #9ab9e8;
+      border-radius: 0.8rem;
+      padding: 0.85rem 0.9rem;
+      color: var(--ro-ink);
+      font-size: 0.9rem;
+      line-height: 1.45;
+    }
+
+    .title-hint {
+      margin-top: 0.8rem;
+      font-size: 0.72rem;
+      opacity: 0.82;
+      color: #445a7d;
+    }
+
+    .gender-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 0.6rem;
+      align-items: center;
+      margin-bottom: 0.8rem;
+    }
+
+    .gender-options {
+      display: flex;
+      gap: 0.6rem;
+      align-items: center;
+      font-size: 0.95rem;
+    }
+
+    .gender-options label {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      cursor: pointer;
+    }
+
+    #genderPreview {
+      width: 72px;
+      height: 72px;
+      filter: drop-shadow(0 6px 12px rgba(0,0,0,0.25));
+      border-radius: 12px;
+      background: linear-gradient(180deg, #fdfdff 0%, #dfeaf9 100%);
+      border: 1px solid #9ab9e8;
+      padding: 6px;
+    }
+
+    /* Ranking modal */
+    #rankingModal {
+      position: absolute;
+      inset: 0;
+      display: none;
+      place-items: center;
+      background: rgba(12, 27, 58, 0.38);
+      z-index: 60;
+      backdrop-filter: blur(3px);
+    }
+
+    .ranking-card {
+      max-width: 480px;
+      width: 92vw;
+      max-height: 80vh;
+      overflow: auto;
+    }
+
+    #rankingList {
+      max-height: 60vh;
+      overflow-y: auto;
+      line-height: 1.5;
+    }
+
+    @media (max-width: 780px) {
+      .options-card {
+        width: 92vw;
+        max-width: 92vw;
+        padding: .9rem 1rem;
+      }
+      .options-card h3 {
+        font-size: 1rem;
+      }
+      .ranking-card {
+        width: 94vw;
+        max-width: 94vw;
+        padding: .9rem 1rem;
+      }
+    }
+
+    /* Name capture modal */
+    #nameModal {
+      position: absolute;
+      inset: 0;
+      display: none;
+      place-items: center;
+      background: rgba(12, 27, 58, 0.38);
+      z-index: 65;
+      backdrop-filter: blur(3px);
+    }
+
+    .name-card {
+      max-width: 480px;
+    }
+
+    .name-field {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .name-field label {
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      font-size: 0.85rem;
+    }
+
+    .name-field input {
+      padding: 0.55rem 0.65rem;
+      border-radius: 10px;
+      border: 1px solid #9ab9e8;
+      font-size: 0.95rem;
+      background: #fdfdff;
+      color: #15243d;
+      outline: none;
+      box-shadow: inset 0 2px 6px rgba(0,0,0,0.05);
+    }
+
+    .name-actions {
+      display: flex;
+      flex-direction: row;
+      gap: 0.6rem;
+      margin-top: 0.35rem;
+      flex-wrap: wrap;
+    }
+
+    .name-actions button {
+      flex: 1 1 0;
+      min-width: 140px;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <!-- HUD text -->
+  <div id="ui"></div>
+  <div id="msg"></div>
+  <div id="pausedText">PAUSED</div>
+
+  <!-- Top in-game controls (shown only after setup) -->
+  <div id="topBar">
+    <button id="statsBtn">Character</button>
+    <button id="adminBtn">Admin</button>
+  </div>
+
+  <!-- Overlay that ui.js uses -->
+  <div id="overlay"></div>
+
+  <!-- Title Screen -->
+  <div id="titleScreen">
+    <div class="title-card">
+      <img id="titleLogo" src="./assets/logo.png" alt="Project Midgard logo" />
+      <div class="title-sub">Arcane Survival Prototype</div>
+      <div class="title-author">by Bisukemar</div>
+
+      <div class="title-buttons">
+        <button id="titleStartBtn">Start Game</button>
+        <button id="titleRankingBtn" class="secondary">Ranking</button>
+        <button id="titleOptionsBtn" class="secondary">Options</button>
+        <button id="installBtn" class="secondary">Install App</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="optionsModal">
+    <div class="options-card">
+      <div class="options-top">
+        <h3>Options</h3>
+        <button id="optionsCloseBtn" class="close-btn">Close</button>
+      </div>
+      <div class="gender-row">
+        <div class="gender-options">
+          <label>
+            <input type="radio" name="gender" value="male" id="genderMale" />
+            <span>Male</span>
+          </label>
+          <label>
+            <input type="radio" name="gender" value="female" id="genderFemale" />
+            <span>Female</span>
+          </label>
+        </div>
+        <canvas id="genderPreview" width="72" height="72"></canvas>
+      </div>
+      <label class="toggle-row">
+        <input type="checkbox" id="adminToggle" />
+        <span>Enable Admin Mode (debug stats / skills / gold)</span>
+      </label>
+      <label class="toggle-row">
+        <input type="checkbox" id="bossDebugToggle" />
+        <span>Start at first boss (debug)</span>
+      </label>
+      <div class="about-box">
+        <strong>About the Developer</strong><br/>
+        This game is being developed by Bisukemar.
+      </div>
+      <div class="title-hint">
+        Admin Mode unlocks the Admin button and F2 shortcut in-game.
+      </div>
+    </div>
+  </div>
+
+  <div id="nameModal">
+    <div class="options-card name-card">
+      <div class="options-top">
+        <h3>Record Your Run</h3>
+      </div>
+      <div class="name-field">
+        <label for="nameInput">Name</label>
+        <input id="nameInput" type="text" maxlength="24" placeholder="Hero" />
+      </div>
+      <div class="title-hint">
+        Your run will be saved locally with your highest level reached.
+      </div>
+      <div class="name-actions title-buttons">
+        <button id="nameSaveBtn">Save Run</button>
+        <button id="nameRestartBtn" class="secondary">Return to Title</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="rankingModal">
+    <div class="options-card ranking-card">
+      <div class="options-top">
+        <h3>Top Adventurers</h3>
+        <button id="rankingCloseBtn" class="close-btn">Close</button>
+      </div>
+      <div class="about-box" id="rankingList">
+        Loading leaderboard...
+      </div>
+      <div class="title-hint">
+        Local runs only. Highest level reached wins.
+      </div>
+    </div>
+  </div>
+
+  <!-- Main game module -->
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
