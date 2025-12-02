@@ -138,7 +138,6 @@ function handleLevelUp() {
   if (L >= 5) {
     unlock('Magnum');
     unlock('DoubleAttack');
-    unlock('LightningBolt');
   }
   if (L >= 6) {
     unlock('Ice');
@@ -1181,6 +1180,7 @@ titleStartBtn.onclick = () => {
   // Unlock starting active skills so the player can choose one
   player.unlocks.Fireball = true;
   player.unlocks.Bash = true;
+  player.unlocks.LightningBolt = true;
 
   // Make the in-game top bar visible now (Character, Shop, etc.)
   if (topBar) topBar.style.display = 'flex';

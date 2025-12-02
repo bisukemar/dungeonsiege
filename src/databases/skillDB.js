@@ -62,6 +62,7 @@ export const SKILL_DB = {
     cooldown:150,
     desc:'Wind-aspected bolt that chains between clustered foes.',
     unlockLevel:6,
+    prereqSkills: { LightningBolt: 2 },
     baseDamage:(s,l)=>Math.max(1,Math.floor(s.int*1.75 + l*2))
   },
   LightningBolt: {
@@ -74,7 +75,7 @@ export const SKILL_DB = {
     perLevel:2,
     cooldown:110,
     desc:'Calls a vertical lightning strike on one foe; each level adds another rapid hit (up to 7).',
-    unlockLevel:5,
+    unlockLevel:1,
     baseDamage:(s,l)=>Math.max(1,Math.floor(s.int*2.0 + l*2))
   },
   Bash: {
