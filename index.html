@@ -131,6 +131,18 @@
       border-color: #f2cf8a;
     }
 
+    #topBar button#resetBtn {
+      border-color: #d89999;
+      background: linear-gradient(180deg, #fff1f1 0%, #f0c2c2 100%);
+      color: #5a1212;
+      display: none;
+    }
+
+    #topBar button#resetBtn:hover {
+      background: linear-gradient(180deg, #fff6f6 0%, #f4cfcf 100%);
+      border-color: #e4aeae;
+    }
+
     @media (max-width: 960px) {
       #ui {
         font-size: 0.75rem;
@@ -138,9 +150,18 @@
         left: calc(8px + env(safe-area-inset-left, 0px));
         top: calc(8px + env(safe-area-inset-top, 0px));
       }
+      #topBar {
+        flex-direction: column;
+        align-items: flex-end;
+      }
       #topBar button {
         font-size: 0.95rem;
         padding: 0.4rem 0.9rem;
+        width: 160px;
+        justify-content: center;
+      }
+      #topBar button#resetBtn {
+        display: inline-flex;
       }
     }
 
@@ -471,6 +492,7 @@
   <!-- Top in-game controls (shown only after setup) -->
   <div id="topBar">
     <button id="statsBtn">Character</button>
+    <button id="resetBtn" aria-label="Reset to Title">Reset</button>
     <button id="adminBtn">Admin</button>
   </div>
 

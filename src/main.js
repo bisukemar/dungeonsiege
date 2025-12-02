@@ -41,6 +41,7 @@ const pausedText = document.getElementById('pausedText');
 
 const topBar = document.getElementById('topBar');
 const statsBtn = document.getElementById('statsBtn');
+const resetBtn = document.getElementById('resetBtn');
 const adminBtn = document.getElementById('adminBtn');
 
 // Title + options
@@ -258,7 +259,7 @@ function drawMonster(ctx, mon, moved, paused=false){
 arrowSprite.img.onload = () => {
   arrowSprite.ready = true;
 };
-arrowSprite.img.src = 'assets/arrow02.png';
+arrowSprite.img.src = 'assets/arrow01.png';
 
 chainLightningSprite.img.onload = () => {
   chainLightningSprite.frameH = chainLightningSprite.img.height;
@@ -1056,6 +1057,10 @@ if (adminBtn) {
     }
     openAdminPanel();
   };
+}
+
+if (resetBtn) {
+  resetBtn.onclick = () => restartToTitle();
 }
 
 if (genderMaleRadio) {

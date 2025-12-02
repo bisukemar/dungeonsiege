@@ -1,4 +1,8 @@
 
+Latest Updates
+- Added a mobile-only Reset button under Character in the HUD to quickly return to the title screen.
+- Fixed the arrow shot visual to use the correct sprite (arrow01.png).
+
 2 December 2025 Update
 - Added skill tiers (I/II/III) with per-tab sorting and tier labels on element tags.
 - Added new skills: Lightning Bolt (Tier I), Chain Lightning (Tier II, requires Lightning Bolt Lv2), and Arrow Storm (Tier III AoE rain); Arrow Shower moved to Tier II.
