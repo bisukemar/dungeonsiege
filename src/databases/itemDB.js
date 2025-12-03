@@ -345,11 +345,7 @@ export const ITEMS_DB = [
     rarity: 'Common',
     sprite: 'assets/item/practice_sword.gif',
     desc: '+1 Str. Lightweight sword for training basic sword skills.',
-    bonuses: {
-      skill: {
-        str: 1
-      }
-    }
+    bonuses: { str: 1 }
   },
   {
     id: 'wooden_staff',
@@ -359,11 +355,7 @@ export const ITEMS_DB = [
     rarity: 'Common',
     sprite: 'assets/item/wooden_staff.gif',
     desc: '+1 Int. A simple staff for novice mages.',
-    bonuses: {
-      skill: {
-        int: 1
-      }
-    }
+    bonuses: { int: 1 }
   },
   {
     id: 'training_bow',
@@ -373,11 +365,7 @@ export const ITEMS_DB = [
     rarity: 'Common',
     sprite: 'assets/item/training_bow.gif',
     desc: '+1 Dex. A basic bow used in archery drills.',
-    bonuses: {
-      skill: {
-        dex: 1
-      }
-    }
+    bonuses: { dex: 1 }
   },
   {
     id: 'oak_rod',

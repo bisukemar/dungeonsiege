@@ -109,6 +109,11 @@ export class Player {
     this.level = 1;
     this.exp = 0;
     this.expToLevel = this.getExpToLevelRequirement(this.level);
+    this.transcendenceBonuses = {};
+    this.transcendenceTitle = 'Novice';
+    this.transcendenceLevel = 1;
+    this.transcendenceSkillPoints = 0;
+    this.__transcendenceApplied = false;
 
     this.baseAttackCooldown = 60;   // frames
     this.defaultAttackTimer = 0;
@@ -118,14 +123,16 @@ export class Player {
   }
 
   getMaxHp(){
-    let hp = PLAYER_BASE_HP + this.stats.vit*HP_PER_VIT;
+    const vit = this.getTotalStat ? this.getTotalStat('vit') : (this.stats?.vit || 0);
+    let hp = PLAYER_BASE_HP + vit*HP_PER_VIT;
     // gear bonuses
     for (const slot in this.equip){
       const it = this.equip[slot];
       if (!it) continue;
       if (it.bonuses?.maxHp) hp += it.bonuses.maxHp;
-      if (it.bonuses?.vit) hp += it.bonuses.vit*HP_PER_VIT;
     }
+    const hpPct = this.transcendenceBonuses?.maxHpPct || 0;
+    if (hpPct) hp *= (1 + hpPct);
     return hp;
   }
 
@@ -136,6 +143,9 @@ export class Player {
       const it = this.equip[slot];
       if (!it) continue;
       if (it.bonuses?.moveSpeed) ms += it.bonuses.moveSpeed;
+    }
+    if (this.transcendenceBonuses?.moveSpeedPct) {
+      ms *= (1 + this.transcendenceBonuses.moveSpeedPct);
     }
     if (ms < 1.2) ms = 1.2;
     if (ms > 5.5) ms = 5.5;
@@ -152,7 +162,8 @@ export class Player {
 
   getAttackCooldown(){
     let cd = this.baseAttackCooldown;
-    cd -= this.stats.agi;
+    const agi = this.getTotalStat ? this.getTotalStat('agi') : (this.stats?.agi || 0);
+    cd -= agi;
     if (cd < 8) cd = 8;
     for (const slot in this.equip){
       const it = this.equip[slot];
@@ -169,7 +180,8 @@ export class Player {
   }
 
   getCritChance(){
-    let cc = 0.05 + this.stats.luck*0.003;
+    const luck = this.getTotalStat ? this.getTotalStat('luck') : (this.stats?.luck || 0);
+    let cc = 0.05 + luck*0.003;
     for (const slot in this.equip){
       const it = this.equip[slot];
       if (!it) continue;
@@ -205,6 +217,27 @@ export class Player {
     return def;
   }
 
+  getGearStatBonuses(){
+    const res = { str:0, agi:0, int:0, dex:0, vit:0, luck:0 };
+    if (!this.equip) return res;
+    Object.values(this.equip).forEach((it) => {
+      if (!it?.bonuses) return;
+      Object.keys(res).forEach((k) => {
+        if (it.bonuses[k]) res[k] += it.bonuses[k];
+      });
+    });
+    return res;
+  }
+
+  getTotalStat(key){
+    const baseTransBonus = (this.__transcendenceStatBonus?.[key] || 0);
+    const base = Math.max(0, (this.stats?.[key] || 0) - baseTransBonus);
+    const gearBonuses = this.getGearStatBonuses();
+    const gear = gearBonuses[key] || 0;
+    const trans = (this.transcendenceBonuses?.stats?.[key] || 0);
+    return base + gear + trans;
+  }
+
   getSkillBonusLevel(skillKey){
     if (!this.equip) return 0;
     let bonus = 0;
@@ -224,7 +257,11 @@ export class Player {
   }
 
   addSkillBonusDamage(skillKey, base){
-    return base + this.getSkillBonusLevel(skillKey);
+    let val = base + this.getSkillBonusLevel(skillKey);
+    if (this.transcendenceBonuses?.skillDamagePct) {
+      val *= (1 + this.transcendenceBonuses.skillDamagePct);
+    }
+    return val;
   }
 
   move(keys, paused, canvas, analogInput){

@@ -411,6 +411,209 @@
       line-height: 1.5;
     }
 
+    /* Transcendence modal */
+    #transcendenceModal {
+      position: absolute;
+      inset: 0;
+      display: none;
+      place-items: center;
+      background: rgba(12, 27, 58, 0.38);
+      z-index: 65;
+      backdrop-filter: blur(3px);
+    }
+
+    .trans-card {
+      width: 520px;
+      max-width: 94vw;
+    }
+
+    .trans-summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 0.6rem;
+      padding: 0.5rem 0.6rem;
+      border: 1px solid #9ab9e8;
+      border-radius: 0.8rem;
+      background: #f8fbff;
+      margin-bottom: 0.6rem;
+    }
+
+    .trans-level {
+      display: flex;
+      align-items: baseline;
+      gap: 0.35rem;
+      font-weight: 700;
+      font-size: 1rem;
+      color: #1b2d4b;
+    }
+
+    .trans-level .label {
+      font-size: 0.75rem;
+      opacity: 0.7;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .trans-progress {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .trans-bar {
+      width: 100%;
+      height: 10px;
+      border-radius: 999px;
+      background: #e3eefe;
+      overflow: hidden;
+      box-shadow: inset 0 2px 6px rgba(10, 34, 76, 0.15);
+    }
+
+    .trans-bar > div {
+      height: 100%;
+      width: 0%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #c084fc, #7c3aed);
+    }
+
+    .trans-exp {
+      font-size: 0.8rem;
+      opacity: 0.75;
+    }
+
+    .trans-points {
+      align-self: center;
+      font-weight: 700;
+      color: #6b21a8;
+      font-size: 0.9rem;
+      text-align: center;
+    }
+
+    .trans-tabs {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .trans-tabs button {
+      flex: 1;
+      padding: 0.45rem 0.6rem;
+      border-radius: 0.75rem;
+      border: 1px solid #9ab9e8;
+      background: linear-gradient(180deg, #ffffff 0%, #d7e8ff 100%);
+      color: #16315c;
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    .trans-tabs button.active {
+      border-color: #a855f7;
+      color: #4c1d95;
+      box-shadow: 0 6px 14px rgba(124, 58, 237, 0.2);
+    }
+
+    .trans-pane {
+      border: 1px solid #9ab9e8;
+      border-radius: 0.9rem;
+      padding: 0.6rem;
+      background: #ffffff;
+      max-height: 50vh;
+      overflow: auto;
+    }
+
+    .trans-skill-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 0.6rem;
+    }
+
+    .trans-skill-card {
+      display: grid;
+      grid-template-columns: 52px 1fr;
+      gap: 0.5rem;
+      padding: 0.55rem;
+      border: 1px solid #d6e4fb;
+      border-radius: 0.9rem;
+      background: linear-gradient(180deg, #fdfdff 0%, #e8f1fb 70%);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.8);
+    }
+
+    .trans-skill-card img {
+      width: 52px;
+      height: 52px;
+      border-radius: 12px;
+      border: 1px solid #c4d7f5;
+      object-fit: cover;
+      background: #fff;
+      box-shadow: 0 3px 8px rgba(10, 34, 76, 0.15);
+    }
+
+    .trans-skill-body {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+
+    .trans-skill-name {
+      font-weight: 700;
+      font-size: 0.95rem;
+      color: #102447;
+    }
+
+    .trans-skill-desc {
+      font-size: 0.8rem;
+      opacity: 0.8;
+    }
+
+    .trans-skill-effects {
+      font-size: 0.8rem;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 0.2rem 0.4rem;
+    }
+
+    .trans-skill-level {
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: #4c1d95;
+    }
+
+    .trans-skill-actions {
+      display: flex;
+      gap: 0.35rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .trans-skill-actions button {
+      padding: 0.35rem 0.6rem;
+      border-radius: 0.7rem;
+      border: 1px solid #9ab9e8;
+      background: linear-gradient(180deg, #ffffff 0%, #d7e8ff 100%);
+      color: #16315c;
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    .trans-skill-actions button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    @media (max-width: 780px) {
+      .trans-card {
+        width: 94vw;
+        max-width: 94vw;
+      }
+      .trans-pane {
+        max-height: 60vh;
+      }
+      .trans-skill-grid {
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      }
+    }
+
     @media (max-width: 780px) {
       .options-card {
         width: 92vw;
@@ -424,6 +627,10 @@
         width: 94vw;
         max-width: 94vw;
         padding: .9rem 1rem;
+      }
+      .trans-card {
+        width: 94vw;
+        max-width: 94vw;
       }
     }
 
@@ -508,6 +715,7 @@
 
       <div class="title-buttons">
         <button id="titleStartBtn">Start Game</button>
+        <button id="titleTransBtn" class="secondary">Transcendence</button>
         <button id="titleRankingBtn" class="secondary">Ranking</button>
         <button id="titleOptionsBtn" class="secondary">Options</button>
         <button id="installBtn" class="secondary">Install App</button>
@@ -542,12 +750,54 @@
         <input type="checkbox" id="bossDebugToggle" />
         <span>Start at first boss (debug)</span>
       </label>
+      <div class="about-box" style="margin-top:0.8rem;">
+        <strong>Transcendence Debug</strong><br/>
+        <div style="display:flex;flex-direction:column;gap:0.35rem;margin-top:0.4rem;">
+          <button id="transGrantBtn" class="secondary">Grant 99 Trans Skill Points</button>
+          <button id="transResetBtn" class="secondary">Reset Transcendence (level/exp/skills)</button>
+        </div>
+      </div>
       <div class="about-box">
         <strong>About the Developer</strong><br/>
         This game is being developed by Bisukemar.
       </div>
       <div class="title-hint">
         Admin Mode unlocks the Admin button and F2 shortcut in-game.
+      </div>
+    </div>
+  </div>
+
+  <div id="transcendenceModal">
+    <div class="options-card trans-card">
+      <div class="options-top">
+        <div>
+          <h3>Transcendence</h3>
+          <div class="trans-title" id="transTitleLabel">Novice</div>
+        </div>
+        <button id="transCloseBtn" class="close-btn">Close</button>
+      </div>
+
+      <div class="trans-summary">
+        <div class="trans-level">
+          <span class="label">Trans Lv</span>
+          <span id="transLevelLabel">1</span>
+        </div>
+        <div class="trans-progress">
+          <div class="trans-bar">
+            <div id="transExpBar"></div>
+          </div>
+          <div class="trans-exp" id="transExpNumbers">0 / 0</div>
+        </div>
+        <div class="trans-points" id="transSkillPoints">Skill Points: 0</div>
+      </div>
+
+      <div class="trans-tabs">
+        <button id="transTabSkills" class="active">Skills</button>
+        <button id="transTabOthers">Others</button>
+      </div>
+
+      <div class="trans-pane" id="transSkillsPane">
+        <div class="trans-skill-grid" id="transSkillList"></div>
       </div>
     </div>
   </div>
@@ -567,6 +817,9 @@
       <div class="name-actions title-buttons">
         <button id="nameSaveBtn">Save Run</button>
         <button id="nameRestartBtn" class="secondary">Return to Title</button>
+      </div>
+      <div class="about-box" id="runSummaryBox" style="margin-top:0.6rem; display:none;">
+        <div id="runSummaryList"></div>
       </div>
     </div>
   </div>

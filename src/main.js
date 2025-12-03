@@ -32,6 +32,19 @@ import {
 import { makeOverlay } from './ui.js';
 import { SKILL_DB } from './databases/skillDB.js';
 import { ITEMS_DB } from './databases/itemDB.js';
+import {
+  addTranscendenceExp,
+  applyTranscendenceBonusesToPlayer,
+  getTranscendenceProgress,
+  getTranscendenceState,
+  getTranscendenceSkillDefs,
+  getTranscendenceTitle,
+  levelUpTranscendenceSkill,
+  resetSessionTranscendenceRun,
+  getSessionTranscendenceExp,
+  setTranscendenceSkillPoints,
+  resetTranscendenceAll
+} from './transcendence.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -55,6 +68,8 @@ const adminToggle = document.getElementById('adminToggle');
 const genderMaleRadio = document.getElementById('genderMale');
 const genderFemaleRadio = document.getElementById('genderFemale');
 const installBtn = document.getElementById('installBtn');
+const transGrantBtn = document.getElementById('transGrantBtn');
+const transResetBtn = document.getElementById('transResetBtn');
 const genderPreview = document.getElementById('genderPreview');
 const genderPreviewCtx = genderPreview ? genderPreview.getContext('2d') : null;
 const joystick = createMobileJoystick(canvas);
@@ -65,7 +80,20 @@ const nameModal = document.getElementById('nameModal');
 const nameInput = document.getElementById('nameInput');
 const nameSaveBtn = document.getElementById('nameSaveBtn');
 const nameRestartBtn = document.getElementById('nameRestartBtn');
+const runSummaryList = document.getElementById('runSummaryList');
 const bossDebugToggle = document.getElementById('bossDebugToggle');
+const titleTransBtn = document.getElementById('titleTransBtn');
+const transModal = document.getElementById('transcendenceModal');
+const transCloseBtn = document.getElementById('transCloseBtn');
+const transTabSkills = document.getElementById('transTabSkills');
+const transTabOthers = document.getElementById('transTabOthers');
+const transSkillsPane = document.getElementById('transSkillsPane');
+const transSkillList = document.getElementById('transSkillList');
+const transLevelLabel = document.getElementById('transLevelLabel');
+const transTitleLabel = document.getElementById('transTitleLabel');
+const transExpBar = document.getElementById('transExpBar');
+const transExpNumbers = document.getElementById('transExpNumbers');
+const transSkillPointsLabel = document.getElementById('transSkillPoints');
 
 // ========= PLAYER SPRITE / ANIMATION =========
 const PLAYER_SHEET_ROWS = 10;
@@ -519,6 +547,10 @@ let spawnTimer = 0;
 let bossMode = false;
 let bossEntity = null;
 let regenTimer = 360;
+let runStartTransLevel = (getTranscendenceState().level || 1);
+let totalMonstersKilled = 0;
+let totalBossesKilled = 0;
+let totalGoldCollected = 0;
 
 // Skill cooldowns table
 player.skillCooldowns = {};
@@ -804,8 +836,134 @@ function closeRankingModal() {
   if (rankingModal) rankingModal.style.display = 'none';
 }
 
+// ========= TRANSCENDENCE UI =========
+function updateTranscendenceUI() {
+  if (!transLevelLabel || !transTitleLabel || !transExpBar || !transExpNumbers || !transSkillPointsLabel) return;
+  const prog = getTranscendenceProgress();
+  const state = getTranscendenceState();
+  transLevelLabel.textContent = prog.level;
+  transTitleLabel.textContent = prog.title;
+  const req = prog.expToNext === Infinity ? 0 : prog.expToNext;
+  transExpBar.style.width = `${Math.min(100, Math.round(prog.fraction * 100))}%`;
+  transExpNumbers.textContent = prog.expToNext === Infinity ? 'MAX' : `${Math.floor(prog.exp)} / ${req}`;
+  transSkillPointsLabel.textContent = `Skill Points: ${state.skillPoints || 0}`;
+  if (transModal && transModal.style.display === 'grid') {
+    renderTranscendenceSkills();
+  }
+}
+
+function renderTranscendenceSkills() {
+  if (!transSkillList) return;
+  const defs = getTranscendenceSkillDefs();
+  const state = getTranscendenceState();
+  transSkillList.innerHTML = '';
+
+  defs.forEach((def) => {
+    const lvl = state.skills?.[def.id] || 0;
+    const max = def.maxLevel || 1;
+    const card = document.createElement('div');
+    card.className = 'trans-skill-card';
+
+    const icon = document.createElement('img');
+    icon.src = def.icon || 'assets/DS-192x192.png';
+    icon.alt = def.name;
+    card.appendChild(icon);
+
+    const body = document.createElement('div');
+    body.className = 'trans-skill-body';
+    card.appendChild(body);
+
+    const nameRow = document.createElement('div');
+    nameRow.className = 'trans-skill-name';
+    nameRow.textContent = def.name;
+    body.appendChild(nameRow);
+
+    const desc = document.createElement('div');
+    desc.className = 'trans-skill-desc';
+    desc.textContent = def.desc || '';
+    body.appendChild(desc);
+
+    const effects = document.createElement('div');
+    effects.className = 'trans-skill-effects';
+    const curr = document.createElement('div');
+    curr.innerHTML = `<strong>Current:</strong> ${def.currentEffect ? def.currentEffect(lvl) : '—'}`;
+    const next = document.createElement('div');
+    next.innerHTML = `<strong>Next:</strong> ${
+      lvl >= max ? 'Max level' : (def.nextEffect ? def.nextEffect(lvl) : 'Next upgrade')
+    }`;
+    effects.appendChild(curr);
+    effects.appendChild(next);
+    body.appendChild(effects);
+
+    const levelTag = document.createElement('div');
+    levelTag.className = 'trans-skill-level';
+    levelTag.textContent = `Level ${lvl} of ${max}`;
+    body.appendChild(levelTag);
+
+    const actions = document.createElement('div');
+    actions.className = 'trans-skill-actions';
+    const prereqMet = (() => {
+      const req = def.requires;
+      if (!req) return true;
+      const levelOk = !req.level || state.level >= req.level;
+      const skillsOk = !req.skills || req.skills.every((id) => (state.skills?.[id] || 0) > 0);
+      return levelOk && skillsOk;
+    })();
+    const upgradeBtn = document.createElement('button');
+    const noPoints = (state.skillPoints || 0) <= 0;
+    upgradeBtn.textContent = lvl >= max ? 'Maxed' : 'Upgrade';
+    upgradeBtn.disabled = lvl >= max || noPoints || !prereqMet;
+    upgradeBtn.onclick = () => {
+      const res = levelUpTranscendenceSkill(def.id);
+      if (!res.ok) {
+        alert(res.reason || 'Unable to upgrade.');
+        return;
+      }
+      applyTranscendenceBonusesToPlayer(player);
+      player.hp = Math.min(player.getMaxHp(), player.hp); // keep current HP within new max
+      updateTranscendenceUI();
+      showMsg(`${def.name} Lv ${res.level}`, 1600);
+    };
+    actions.appendChild(upgradeBtn);
+    body.appendChild(actions);
+
+    transSkillList.appendChild(card);
+  });
+}
+
+function openTranscendenceModal() {
+  if (!transModal) return;
+  transModal.style.display = 'grid';
+  updateTranscendenceUI();
+  renderTranscendenceSkills();
+}
+
+function closeTranscendenceModal() {
+  if (transModal) transModal.style.display = 'none';
+}
+
 function openNameModal(level) {
   pendingLeaderboardLevel = level;
+  const transSummaryEl = document.getElementById('transRunSummary');
+  if (transSummaryEl) transSummaryEl.textContent = '';
+  if (runSummaryList) {
+    const transState = getTranscendenceState();
+    const gained = getSessionTranscendenceExp();
+    const deltaLv = transState.level - (runStartTransLevel || transState.level);
+    const levelText = deltaLv > 0
+      ? `Lv ${runStartTransLevel} → ${transState.level}`
+      : `Lv ${transState.level}`;
+    const xpText = gained ? `+${gained} XP` : 'No XP gained';
+    runSummaryList.innerHTML = `
+      <div style="font-weight:700;margin-bottom:0.25rem;">Game Summary</div>
+      <div><strong>Total Monsters Killed:</strong> ${totalMonstersKilled}</div>
+      <div><strong>Total Bosses Killed:</strong> ${totalBossesKilled}</div>
+      <div><strong>Total Gold Gathered:</strong> ${totalGoldCollected}</div>
+      <div><strong>Transcendence:</strong> ${levelText} (${xpText})</div>
+    `;
+    const box = document.getElementById('runSummaryBox');
+    if (box) box.style.display = 'block';
+  }
   if (!nameModal || !nameInput || !nameSaveBtn) {
     // Fallback to prompt if modal is missing
     const fallbackName = prompt('Enter your name for the leaderboard:', 'Hero') || 'Unknown Adventurer';
@@ -813,7 +971,7 @@ function openNameModal(level) {
     addLeaderboardEntry(clean, level);
     renderLeaderboard();
     showMsg(
-      `YOU DIED — ${clean}'s run saved at Lv ${level}. Use Return to Title to play again.`,
+      buildDeathMessage(clean, level),
       8000,
       { actionLabel: 'Back to Title', onAction: restartToTitle }
     );
@@ -828,6 +986,10 @@ function closeNameModal() {
   if (nameModal) nameModal.style.display = 'none';
 }
 
+function buildDeathMessage(name, level) {
+  return `YOU DIED — ${name}'s run saved at Lv ${level}. Use Return to Title to play again.`;
+}
+
 function submitNameModal(useInput=true) {
   const level = pendingLeaderboardLevel || player.level || 1;
   let name = 'Unknown Adventurer';
@@ -839,7 +1001,7 @@ function submitNameModal(useInput=true) {
   closeNameModal();
   pendingLeaderboardLevel = null;
   showMsg(
-    `YOU DIED — ${name}'s run saved at Lv ${level}. Use Return to Title to play again.`,
+    buildDeathMessage(name, level),
     8000,
     { actionLabel: 'Back to Title', onAction: restartToTitle }
   );
@@ -882,6 +1044,10 @@ function restartToTitle() {
   bossMode = false;
   bossEntity = null;
   regenTimer = 360;
+  resetSessionTranscendenceRun();
+  totalMonstersKilled = 0;
+  totalBossesKilled = 0;
+  totalGoldCollected = 0;
   keys = {};
   if (joystick && typeof joystick.hide === 'function') joystick.hide();
 
@@ -934,7 +1100,15 @@ function restartToTitle() {
   player.dy = facingY;
   player.x = world.width / 2;
   player.y = world.height / 2;
+  player.__transcendenceApplied = false;
+  player.transcendenceBonuses = {};
+  const baseTrans = getTranscendenceState();
+  player.transcendenceTitle = getTranscendenceTitle(baseTrans.level || 1);
+  runStartTransLevel = baseTrans.level || 1;
+  player.__transcendenceStatBonus = {};
   centerCamera(player);
+  const summaryBox = document.getElementById('runSummaryBox');
+  if (summaryBox) summaryBox.style.display = 'none';
 
   playerSprite.state = 'idle';
   playerSprite.frame = 0;
@@ -1018,6 +1192,14 @@ if (titleRankingBtn) {
   };
 }
 
+if (titleTransBtn) {
+  titleTransBtn.onclick = () => {
+    if (optionsModal) optionsModal.style.display = 'none';
+    closeRankingModal();
+    openTranscendenceModal();
+  };
+}
+
 if (optionsCloseBtn) {
   optionsCloseBtn.onclick = () => {
     optionsModal.style.display = 'none';
@@ -1044,6 +1226,28 @@ if (adminToggle) {
 if (bossDebugToggle) {
   bossDebugToggle.onchange = (e) => {
     startAtBossDebug = !!e.target.checked;
+  };
+}
+
+if (transGrantBtn) {
+  transGrantBtn.onclick = () => {
+    setTranscendenceSkillPoints(99);
+    applyTranscendenceBonusesToPlayer(player);
+    updateTranscendenceUI();
+    alert('Granted 99 Transcendence Skill Points.');
+  };
+}
+
+if (transResetBtn) {
+  transResetBtn.onclick = () => {
+    if (!confirm('Reset Transcendence level, exp, and skills?')) return;
+    resetTranscendenceAll();
+    applyTranscendenceBonusesToPlayer(player);
+    player.__transcendenceApplied = false;
+    player.__transcendenceStatBonus = {};
+    applyTranscendenceBonusesToPlayer(player);
+    updateTranscendenceUI();
+    alert('Transcendence progress reset.');
   };
 }
 
@@ -1077,6 +1281,34 @@ if (!previewAnimStarted && genderPreviewCtx) {
 if (rankingCloseBtn) {
   rankingCloseBtn.onclick = () => closeRankingModal();
 }
+
+if (transCloseBtn) {
+  transCloseBtn.onclick = () => closeTranscendenceModal();
+}
+
+if (transModal) {
+  transModal.addEventListener('click', (e) => {
+    if (e.target === transModal) {
+      closeTranscendenceModal();
+    }
+  });
+}
+
+if (transTabSkills && transTabOthers) {
+  transTabSkills.onclick = () => {
+    transTabSkills.classList.add('active');
+    transTabOthers.classList.remove('active');
+    if (transSkillsPane) transSkillsPane.style.display = 'block';
+  };
+  transTabOthers.onclick = () => {
+    alert('Not yet implemented');
+    transTabOthers.classList.remove('active');
+    transTabSkills.classList.add('active');
+    if (transSkillsPane) transSkillsPane.style.display = 'block';
+  };
+}
+
+updateTranscendenceUI();
 
 if (rankingModal) {
   rankingModal.addEventListener('click', (e) => {
@@ -1184,6 +1416,8 @@ titleStartBtn.onclick = () => {
 
   // Re-apply gender selection on start
   applyGender(loadGenderFromStorage());
+  const summaryBox = document.getElementById('runSummaryBox');
+  if (summaryBox) summaryBox.style.display = 'none';
 
   // Reset stats to base values (no admin stat boost)
   player.stats = { str:3, agi:3, int:3, dex:3, vit:3, luck:3 };
@@ -1193,12 +1427,21 @@ titleStartBtn.onclick = () => {
   player.exp = 0;
   player.expToLevel = 0;
   player.hp = player.getMaxHp();
+  player.__transcendenceApplied = false;
+  runStartTransLevel = getTranscendenceState().level || 1;
+  resetSessionTranscendenceRun();
+  totalMonstersKilled = 0;
+  totalBossesKilled = 0;
+  totalGoldCollected = 0;
 
   // Unlock starting active skills so the player can choose one
   player.unlocks.Fireball = true;
   player.unlocks.Bash = true;
   player.unlocks.LightningBolt = true;
   player.unlocks.Arrow = true;
+
+  applyTranscendenceBonusesToPlayer(player);
+  player.hp = player.getMaxHp();
 
   // Make the in-game top bar visible now (Character, Shop, etc.)
   if (topBar) topBar.style.display = 'flex';
@@ -1303,7 +1546,10 @@ let overlay = null;
 function getOverlay() {
   if (!overlay) {
     const useMobileOverlay = window.innerWidth < 960;
-    overlay = makeOverlay(document, player, handleOverlayClosed, { forceMobile: useMobileOverlay });
+    overlay = makeOverlay(document, player, handleOverlayClosed, {
+      forceMobile: useMobileOverlay,
+      getTranscendenceState: () => getTranscendenceState()
+    });
   }
   return overlay;
 }
@@ -1624,7 +1870,8 @@ function openChestOverlay(chest) {
   rightHeader.appendChild(goldLabel);
 
   const reroll = document.createElement('button');
-  reroll.textContent = `Re-roll (${CHEST_REROLL_COST} gold)`;
+  const rerollCost = () => Math.max(0, CHEST_REROLL_COST - (player.transcendenceBonuses?.chestRerollFlat || 0));
+  reroll.textContent = `Re-roll (${rerollCost()} gold)`;
   reroll.style.borderRadius = '999px';
   reroll.style.border = '1px solid #d1a85c';
   reroll.style.background = 'linear-gradient(180deg, #fff9ea 0%, #f0dfad 100%)';
@@ -1636,11 +1883,12 @@ function openChestOverlay(chest) {
       paused = true;
       pausedText.style.display = 'block';
     }
-    if ((player.gold || 0) < CHEST_REROLL_COST) {
+    const cost = rerollCost();
+    if ((player.gold || 0) < cost) {
       showMsg('Not enough gold to re-roll!', 1500);
       return;
     }
-    player.gold -= CHEST_REROLL_COST;
+    player.gold -= cost;
     chest.options = pickChestOptions(chest.poolIds || []);
     openChestOverlay(chest);
     // ensure the game stays paused after reroll
@@ -2102,9 +2350,15 @@ function drawBossPointer(ctx) {
 function updateHUD() {
   const need = killsForRound(round);
   const bossTxt = bossMode ? ' BOSS ROUND' : '';
+  const trans = getTranscendenceProgress();
+  const transTitle = trans ? getTranscendenceTitle(trans.level) : 'Novice';
+  const expText = !trans || trans.expToNext === Infinity
+    ? 'MAX'
+    : `${Math.floor(trans.exp)}/${trans.expToNext}`;
   uiDiv.textContent =
     `LV ${player.level}${bossTxt}\n` +
     `HP ${Math.round(player.hp)}/${Math.round(player.getMaxHp())}\n` +
+    `Trans: Lv ${trans?.level || 1} (${transTitle}) EXP ${expText}\n` +
     `StatPts: ${player.statPoints}   SkillPts: ${player.skillPoints}\n` +
     `Gold: ${player.gold || 0}\n` +
     `Round: ${round}   Kills: ${killsThisRound}/${need}`;
@@ -2123,6 +2377,7 @@ function togglePause() {
 
 function onMonsterKilled(mon) {
   killsThisRound++;
+  totalMonstersKilled++;
 
   if (!mon.isBoss) {
     const lvl = mon.level || 1;
@@ -2130,6 +2385,13 @@ function onMonsterKilled(mon) {
     if (Math.random() < Math.min(0.7, 0.25 + round * 0.02)) {
       coins.push({ x: mon.x, y: mon.y, amount: gold });
     }
+  }
+  const transResult = addTranscendenceExp(mon.expValue || 0);
+  updateTranscendenceUI();
+  if (transResult?.leveledUp) {
+    applyTranscendenceBonusesToPlayer(player);
+    showMsg(`Transcendence Lv ${transResult.level}!`, 1800);
+    updateTranscendenceUI();
   }
 
   const need = killsForRound(round);
@@ -2158,6 +2420,14 @@ function handleMonsterDeath(mon) {
   mon.__dead = true;
 
   if (mon.isBoss) {
+    totalBossesKilled++;
+    const transResult = addTranscendenceExp(mon.expValue || 0);
+    updateTranscendenceUI();
+    if (transResult?.leveledUp) {
+      applyTranscendenceBonusesToPlayer(player);
+      showMsg(`Transcendence Lv ${transResult.level}!`, 1800);
+      updateTranscendenceUI();
+    }
     spawnBossChest(mon);
     bossMode = false;
     bossEntity = null;
@@ -2327,16 +2597,20 @@ function loop() {
     const d = Math.hypot(c.x - player.x, c.y - player.y);
 
     const basePickup = player.r + 10; // baseline radius near the player
-    const luck = (player.stats && player.stats.luck) || 0;
+    const luck = typeof player.getTotalStat === 'function' ? player.getTotalStat('luck') : ((player.stats && player.stats.luck) || 0);
 
     // Scale LUK so 99 LUK can reach roughly the whole screen.
     const screenRadius = Math.hypot(canvas.width, canvas.height) / 2;
     const extraPerLuck = screenRadius / 99;
     let pickupRadius = basePickup + luck * extraPerLuck;
+    if (player.transcendenceBonuses?.pickupRadius) pickupRadius += player.transcendenceBonuses.pickupRadius;
     if (pickupRadius > screenRadius) pickupRadius = screenRadius;
 
     if (d < pickupRadius) {
-      player.gold = (player.gold || 0) + c.amount;
+      const goldBonus = player.transcendenceBonuses?.goldGainPct || 0;
+      const goldEarned = Math.floor(c.amount * (1 + goldBonus));
+      player.gold = (player.gold || 0) + goldEarned;
+      totalGoldCollected += goldEarned;
       coins.splice(i, 1);
     }
   }
@@ -2383,7 +2657,8 @@ function loop() {
           if (player.skillCooldowns[key] > 0) return;
           caster();
           lockAttackAnimation();
-          const agiFactor = Math.floor(player.stats.agi * 1);
+          const agi = typeof player.getTotalStat === 'function' ? player.getTotalStat('agi') : (player.stats?.agi || 0);
+          const agiFactor = Math.floor(agi * 1);
           let cd = baseCdFrames - agiFactor;
           if (cd < 10) cd = 10;
           player.skillCooldowns[key] = cd;

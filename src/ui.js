@@ -199,6 +199,7 @@ export function makeOverlay(doc, player, onClose, opts = {}){
   const vw = doc.defaultView ? doc.defaultView.innerWidth : 1200;
   const isNarrow = vw < 960;
   const isMobile = forceMobile || vw < 900;
+  const getTransState = typeof opts.getTranscendenceState === 'function' ? opts.getTranscendenceState : null;
 
   // root overlay (re-use if already exists)
   const overlayId = isMobile ? 'char-overlay-mobile' : 'char-overlay';
@@ -381,7 +382,7 @@ export function makeOverlay(doc, player, onClose, opts = {}){
   nameInfo.appendChild(nameEl);
 
   const classEl = doc.createElement('div');
-  classEl.textContent = 'Adventurer';
+  classEl.textContent = 'Character Level';
   classEl.style.fontSize = '.74rem';
   classEl.style.opacity = '0.8';
   nameInfo.appendChild(classEl);
@@ -716,6 +717,9 @@ export function makeOverlay(doc, player, onClose, opts = {}){
     const val = doc.createElement('span');
     val.style.fontSize = '.8rem';
     val.style.fontWeight = '600';
+    val.style.display = 'flex';
+    val.style.alignItems = 'baseline';
+    val.style.gap = '.28rem';
     right.appendChild(val);
 
     const btn = doc.createElement('button');
@@ -1255,8 +1259,12 @@ export function makeOverlay(doc, player, onClose, opts = {}){
       const priceSpan = doc.createElement('span');
       priceSpan.style.fontSize = '.78rem';
       priceSpan.style.opacity = '0.9';
-      const price = getStandardPrice(item);
-      priceSpan.textContent = `${price}g`;
+      const basePrice = getStandardPrice(item);
+      const discount = player.transcendenceBonuses?.shopDiscountPct || 0;
+      const price = Math.max(1, Math.floor(basePrice * (1 - discount)));
+      priceSpan.textContent = discount > 0
+        ? `${price}g (-${Math.round(discount * 100)}%)`
+        : `${price}g`;
       top.appendChild(priceSpan);
 
       const typeSpan = doc.createElement('span');
@@ -1292,7 +1300,9 @@ export function makeOverlay(doc, player, onClose, opts = {}){
 
       btn.onclick = (ev) => {
         ev.stopPropagation();
-        const cost = getStandardPrice(item);
+        const baseCost = getStandardPrice(item);
+        const discount = player.transcendenceBonuses?.shopDiscountPct || 0;
+        const cost = Math.max(1, Math.floor(baseCost * (1 - discount)));
         const currentGold = player.gold || 0;
         if (currentGold < cost) return;
         player.gold = currentGold - cost;
@@ -1838,6 +1848,8 @@ export function makeOverlay(doc, player, onClose, opts = {}){
   function updateAll(){
         const maxHp = player.getMaxHp ? player.getMaxHp() : (player.maxHp || 1);
     const hpPct = Math.max(0, Math.min(1, player.hp / maxHp));
+    const trans = getTransState ? getTransState() : null;
+    const transTitle = trans?.title || 'Hero of Midgard';
 
     // HP bar color: green >50%, orange >25–50%, red ≤25%
     let hpGradient = 'linear-gradient(to right, #22c55e, #16a34a)'; // green
@@ -1853,6 +1865,8 @@ export function makeOverlay(doc, player, onClose, opts = {}){
 
 
     const lvl = player.level || 1;
+    nameEl.textContent = transTitle;
+    classEl.textContent = `Character Lv ${lvl}`;
     lvlValue.textContent = `Lv ${lvl}`;
 
     const sp = player.statPoints || 0;
@@ -1868,7 +1882,7 @@ export function makeOverlay(doc, player, onClose, opts = {}){
     const ms = typeof player.getMoveSpeed === 'function' ? player.getMoveSpeed() : 0;
     const atkCd = typeof player.getAttackCooldown === 'function' ? player.getAttackCooldown() : 0;
     const atkSpd = atkCd > 0 ? (60 / atkCd) : 0;
-    const luck = (player.stats && player.stats.luck) || 0;
+    const luck = typeof player.getTotalStat === 'function' ? player.getTotalStat('luck') : ((player.stats && player.stats.luck) || 0);
     const vw = doc.defaultView ? doc.defaultView.innerWidth : 800;
     const vh = doc.defaultView ? doc.defaultView.innerHeight : 600;
     const screenRadius = Math.hypot(vw, vh) / 2;
@@ -1940,7 +1954,8 @@ export function makeOverlay(doc, player, onClose, opts = {}){
 
     // Bonus HP from items and skills
     if (statRows.bonusHp) {
-      const baseHp = PLAYER_BASE_HP + (player.stats?.vit || 0) * HP_PER_VIT;
+      const vitTotal = typeof player.getTotalStat === 'function' ? player.getTotalStat('vit') : (player.stats?.vit || 0);
+      const baseHp = PLAYER_BASE_HP + vitTotal * HP_PER_VIT;
       let bonusHp = 0;
       if (player.equip) {
         Object.values(player.equip).forEach((it) => {
@@ -1956,7 +1971,7 @@ export function makeOverlay(doc, player, onClose, opts = {}){
 
     // Current Skill Range: use nearest active skill; fallback to arrow/fireball average
     if (statRows.skillRange) {
-      const dex = player.stats?.dex || 0;
+      const dex = typeof player.getTotalStat === 'function' ? player.getTotalStat('dex') : (player.stats?.dex || 0);
       const rangeArrow = 240 + Math.min(40, dex) * 12; // matches computeProjectileLifeForDex baseRange
       const rangeFire = 200 + Math.min(40, dex) * 12;
       const avgRange = Math.round((rangeArrow + rangeFire) / 2);
@@ -1965,12 +1980,41 @@ export function makeOverlay(doc, player, onClose, opts = {}){
 
     // attributes
     if (!player.stats) player.stats = { str:0, agi:0, vit:0, int:0, dex:0, luck:0 };
-    attrControls.str.val.textContent = player.stats.str;
-    attrControls.agi.val.textContent = player.stats.agi;
-    attrControls.vit.val.textContent = player.stats.vit;
-    attrControls.int.val.textContent = player.stats.int;
-    attrControls.dex.val.textContent = player.stats.dex;
-    attrControls.luck.val.textContent = player.stats.luck;
+
+    const gearStats = typeof player.getGearStatBonuses === 'function'
+      ? player.getGearStatBonuses()
+      : { str:0, agi:0, vit:0, int:0, dex:0, luck:0 };
+    const transStats = player.transcendenceBonuses?.stats || {};
+
+    ['str','agi','vit','int','dex','luck'].forEach((key) => {
+      const ctrl = attrControls[key];
+      if (!ctrl) return;
+      const base = player.stats?.[key] || 0;
+      const gear = gearStats[key] || 0;
+      const trans = transStats[key] || 0;
+
+      const spans = [];
+      const baseSpan = doc.createElement('span');
+      baseSpan.textContent = base;
+      spans.push(baseSpan);
+
+      if (gear) {
+        const gearSpan = doc.createElement('span');
+        gearSpan.textContent = `(+${gear})`;
+        gearSpan.style.color = '#6b7280';
+        spans.push(gearSpan);
+      }
+
+      if (trans) {
+        const transSpan = doc.createElement('span');
+        transSpan.textContent = `(+${trans})`;
+        transSpan.style.color = '#eab308';
+        spans.push(transSpan);
+      }
+
+      ctrl.val.innerHTML = '';
+      spans.forEach((s) => ctrl.val.appendChild(s));
+    });
 
     Object.entries(attrControls).forEach(([key, ctrl]) => {
       const can = (player.statPoints || 0) > 0 && (player.stats?.[key] ?? 0) < 99;

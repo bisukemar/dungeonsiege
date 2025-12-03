@@ -28,6 +28,11 @@ function getEffectiveSkillLevel(player, key) {
   return (player.skillLevel && player.skillLevel[key]) || 0;
 }
 
+const getStat = (player, key) => {
+  if (player && typeof player.getTotalStat === 'function') return player.getTotalStat(key);
+  return (player?.stats?.[key] || 0);
+};
+
 // Small helper so DEX controls range in a sane way for all projectile skills.
 function computeProjectileLifeForDex(baseRange, speed, dex) {
   // baseRange is in world units (pixels). Each point of DEX adds a bit of range,
@@ -42,7 +47,7 @@ function computeProjectileLifeForDex(baseRange, speed, dex) {
 }
 
 function getMaxSkillRange(player) {
-  const dex = Math.max(0, Math.min(player?.stats?.dex || 0, 40));
+  const dex = Math.max(0, Math.min(getStat(player, 'dex') || 0, 40));
   return 240 + dex * 12; // matches Arrow base range scaling
 }
 
@@ -70,7 +75,7 @@ export function castMeteorStorm(player, meteorStrikes, nearestFn, avoidFields = 
   const radius = baseRadius + (level - 1) * radiusPerLevel;
   const delay = Math.max(30, baseDelay - (level - 1) * delayPerLevel);
 
-  let dmg = player.stats.int * baseMul + level * bonusLvl;
+  let dmg = getStat(player, 'int') * baseMul + level * bonusLvl;
   if (typeof player.addSkillBonusDamage === 'function') {
     dmg = player.addSkillBonusDamage('Meteor', dmg);
   }
@@ -112,7 +117,7 @@ export function castFireball(player, projectiles, nearestFn) {
   const vy = (dy / dist) * speed;
 
   const level = getEffectiveSkillLevel(player, 'Fireball');
-  let dmg = player.stats.int * 2 + level;
+  let dmg = getStat(player, 'int') * 2 + level;
   if (typeof player.addSkillBonusDamage === 'function') {
     dmg = player.addSkillBonusDamage('Fireball', dmg);
   }
@@ -121,7 +126,7 @@ export function castFireball(player, projectiles, nearestFn) {
   // At low DEX, Fireball reaches only a bit beyond the visible area around the player.
   // Each point of DEX adds a modest amount of extra range.
   const baseRange = 200; // shorter reach at low DEX
-  const dex = player.stats.dex || 0;
+  const dex = getStat(player, 'dex');
   const life = computeProjectileLifeForDex(baseRange, speed, dex);
 
   const color = '#ff9800';
@@ -146,7 +151,7 @@ export function castArrow(player, projectiles, nearestFn) {
   const vy = (dy / dist) * speed;
 
   const level = getEffectiveSkillLevel(player, 'Arrow');
-  let dmg = player.stats.str * 2 + player.stats.dex * 0.5 + level;
+  let dmg = getStat(player, 'str') * 2 + getStat(player, 'dex') * 0.5 + level;
   if (typeof player.addSkillBonusDamage === 'function') {
     dmg = player.addSkillBonusDamage('Arrow', dmg);
   }
@@ -155,7 +160,7 @@ export function castArrow(player, projectiles, nearestFn) {
   // Arrow has a slightly longer base range than Fireball, but still cannot
   // hit monsters at the very edge of the screen with only 1 DEX.
   const baseRange = 240;
-  const dex = player.stats.dex || 0;
+  const dex = getStat(player, 'dex');
   const life = computeProjectileLifeForDex(baseRange, speed, dex);
 
   const angle = Math.atan2(vy, vx);
@@ -189,11 +194,11 @@ export function castArrowShower(player, projectiles, nearestFn) {
     : fallbackAng;
 
   const speed = 7.2;
-  const dex = player.stats.dex || 0;
+  const dex = getStat(player, 'dex');
   const life = computeProjectileLifeForDex(260, speed, dex);
 
   const level = getEffectiveSkillLevel(player, 'ArrowShower');
-  let dmg = player.stats.dex * 1.4 + level * 2;
+  let dmg = getStat(player, 'dex') * 1.4 + level * 2;
   if (typeof player.addSkillBonusDamage === 'function') {
     dmg = player.addSkillBonusDamage('ArrowShower', dmg);
   }
@@ -264,13 +269,13 @@ export function castIceWave(player, iceArr) {
   const dy = Math.sin(angle);
 
   const level = getEffectiveSkillLevel(player, 'Ice');
-  let dmg = player.stats.int * 1.6 + level;
+  let dmg = getStat(player, 'int') * 1.6 + level;
   if (typeof player.addSkillBonusDamage === 'function') {
     dmg = player.addSkillBonusDamage('Ice', dmg);
   }
 
   // DEX slightly increases the size of the cone, but it still starts fairly small.
-  const dex = player.stats.dex || 0;
+  const dex = getStat(player, 'dex');
   const rangeScale = 1 + dex * 0.04; // gentle scaling
 
   iceArr.push(new IceWave(player.x, player.y, dx, dy, dmg, rangeScale));
@@ -324,12 +329,12 @@ export function castBash(player, bashArr, target = null) {
   const dy = Math.sin(angle);
 
   const level = getEffectiveSkillLevel(player, 'Bash');
-  let dmg = player.stats.str * 2.2 + level;
+  let dmg = getStat(player, 'str') * 2.2 + level;
   if (typeof player.addSkillBonusDamage === 'function') {
     dmg = player.addSkillBonusDamage('Bash', dmg);
   }
 
-  const dex = player.stats.dex || 0;
+  const dex = getStat(player, 'dex');
   const rangeScale = 1 + dex * 0.04;
 
   bashArr.push(new BashWave(player.x, player.y, dx, dy, dmg, target, rangeScale));
@@ -380,12 +385,12 @@ export function castPiercingStrike(player, pierceArr) {
   const dy = Math.sin(angle);
 
   const level = getEffectiveSkillLevel(player, 'PiercingStrike');
-  let dmg = player.stats.str * 2.2 + level * 1.5;
+  let dmg = getStat(player, 'str') * 2.2 + level * 1.5;
   if (typeof player.addSkillBonusDamage === 'function') {
     dmg = player.addSkillBonusDamage('PiercingStrike', dmg);
   }
 
-  const dex = player.stats.dex || 0;
+  const dex = getStat(player, 'dex');
   const rangeScale = 1 + dex * 0.04;
 
   pierceArr.push(new PiercingStrikeWave(player.x, player.y, dx, dy, dmg, rangeScale));
@@ -422,12 +427,12 @@ export class MagnumBreakWave {
 
 export function castMagnum(player, magArr) {
   const level = getEffectiveSkillLevel(player, 'Magnum');
-  let dmg = player.stats.str * 1.8 + player.stats.dex * 0.3 + level * 2;
+  let dmg = getStat(player, 'str') * 1.8 + getStat(player, 'dex') * 0.3 + level * 2;
   if (typeof player.addSkillBonusDamage === 'function') {
     dmg = player.addSkillBonusDamage('Magnum', dmg);
   }
 
-  const dex = player.stats.dex || 0;
+  const dex = getStat(player, 'dex');
   const rangeScale = 1 + dex * 0.03;
 
   magArr.push(new MagnumBreakWave(player.x, player.y, dmg, rangeScale));
@@ -528,7 +533,7 @@ export function castArrowStorm(player, arrowStorms, nearestFn, avoidFields = [])
   const baseRadius = 70;
   const radius = baseRadius + (level - 1) * 6;
 
-  let dmg = player.stats.dex * 1.5 + level * 2;
+  let dmg = getStat(player, 'dex') * 1.5 + level * 2;
   if (typeof player.addSkillBonusDamage === 'function') {
     dmg = player.addSkillBonusDamage('ArrowStorm', dmg);
   }
@@ -596,7 +601,7 @@ export function castQuagmire(player, quagmires, nearestFn, avoidMeteors = []) {
 
   const baseRadius = 80;
   const radius = baseRadius + (level - 1) * 8;
-  const tickDamage = player.stats.int * 0.5 + level * 2;
+  const tickDamage = getStat(player, 'int') * 0.5 + level * 2;
   const fireVuln = 0.1 + (level - 1) * 0.05;
 
   let dmg = tickDamage;
@@ -649,7 +654,7 @@ export function castChainLightning(player, chainBolts, nearestFn, monsterPool, h
   const bounceRange = Math.min(maxRange, baseRange + level * 6);
   const chainCount = Math.min(5, 3 + (level >= 3 ? 1 : 0) + (level >= 6 ? 1 : 0));
 
-  let baseDmg = player.stats.int * 1.75 + level * 2;
+  let baseDmg = getStat(player, 'int') * 1.75 + level * 2;
   if (typeof player.addSkillBonusDamage === 'function') {
     baseDmg = player.addSkillBonusDamage('ChainLightning', baseDmg);
   }
@@ -701,7 +706,7 @@ export function castLightningBolt(player, boltArr, nearestFn, hitFn) {
   player.dy = Math.sin(ang);
 
   const hits = Math.min(7, Math.max(1, level));
-  let dmg = player.stats.int * 2.0 + level * 2;
+  let dmg = getStat(player, 'int') * 2.0 + level * 2;
   if (typeof player.addSkillBonusDamage === 'function') {
     dmg = player.addSkillBonusDamage('LightningBolt', dmg);
   }
