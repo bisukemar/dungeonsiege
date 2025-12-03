@@ -3,6 +3,7 @@ Latest Updates
 - Added Transcendence system: persistent levels (max 99) with titles, skill point upgrades, and XP gained from monster kills.
 - New Transcendence menu on the title screen with Skills/Others tabs, upgradeable transcendent skills, and persistent save data.
 - Revised Transcendence skill lineup (all max level 10) with clear Current/Next effect labels and functional bonuses (stats, gold gain, shop discount, chest reroll cost, pickup radius).
+- Updated Transcendence EXP curve with fixed per-level bands (1500–6000 XP) up to Lv 99.
 - Added a mobile-only Reset button under Character in the HUD to quickly return to the title screen.
 - Fixed the arrow shot visual to use the correct sprite (arrow01.png).
 
