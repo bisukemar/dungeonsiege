@@ -56,6 +56,10 @@ const topBar = document.getElementById('topBar');
 const statsBtn = document.getElementById('statsBtn');
 const resetBtn = document.getElementById('resetBtn');
 const adminBtn = document.getElementById('adminBtn');
+const gearBtn = document.getElementById('gearBtn');
+const gearMenu = document.getElementById('gearMenu');
+const gearStats = document.getElementById('gearStats');
+const gearReset = document.getElementById('gearReset');
 
 // Title + options
 const titleScreen = document.getElementById('titleScreen');
@@ -72,6 +76,13 @@ const transGrantBtn = document.getElementById('transGrantBtn');
 const transResetBtn = document.getElementById('transResetBtn');
 const genderPreview = document.getElementById('genderPreview');
 const genderPreviewCtx = genderPreview ? genderPreview.getContext('2d') : null;
+const setupModal = document.getElementById('initialSetupModal');
+const setupAttrList = document.getElementById('setupAttrList');
+const setupSkillList = document.getElementById('setupSkillList');
+const setupAttrPoints = document.getElementById('setupAttrPoints');
+const setupSkillPoints = document.getElementById('setupSkillPoints');
+const setupConfirmBtn = document.getElementById('setupConfirmBtn');
+const setupBackBtn = document.getElementById('setupBackBtn');
 const joystick = createMobileJoystick(canvas);
 const rankingModal = document.getElementById('rankingModal');
 const rankingCloseBtn = document.getElementById('rankingCloseBtn');
@@ -113,6 +124,14 @@ const chestSprite = { img: new Image(), ready: false, frameH: 0, frameW: 0 };
 const obstacleSpriteCache = new Map();
 const monsterSpriteCache = new Map();
 const ITEM_MAP = Object.fromEntries((ITEMS_DB || []).map((it) => [it.id, it]));
+const ELEMENT_COLOR = {
+  FIRE:'#e34a4a',
+  WATER:'#4aa3e3',
+  WIND:'#4caf50',
+  EARTH:'#8b5a2b',
+  NEUTRAL:'#9ca3af'
+};
+const getElementColor = (elem) => ELEMENT_COLOR[elem] || '#9ca3af';
 const previewSprite = {
   img: new Image(),
   ready: false,
@@ -942,6 +961,155 @@ function closeTranscendenceModal() {
   if (transModal) transModal.style.display = 'none';
 }
 
+// Initial setup modal (stats + starting skill)
+let setupState = null;
+let prevTopBarDisplay = null;
+function openInitialSetup() {
+  if (!setupModal || !setupAttrList || !setupSkillList || !setupConfirmBtn) return;
+  if (topBar) {
+    prevTopBarDisplay = topBar.style.display;
+    topBar.style.display = 'none';
+  }
+  const baseStats = { ...player.stats };
+  const transBonus = player.__transcendenceStatBonus || {};
+  Object.keys(baseStats).forEach((k) => {
+    baseStats[k] = Math.max(0, (baseStats[k] || 0) - (transBonus[k] || 0));
+  });
+  setupState = {
+    stats: baseStats,
+    statPoints: player.statPoints || 0,
+    skills: { ...player.skillLevel },
+    skillPoints: player.skillPoints || 0,
+    selectedSkill: null
+  };
+
+  // Limit skills to starting unlocked ones
+  const startingSkills = ['Fireball', 'Bash', 'LightningBolt', 'Arrow'];
+  setupState.skills = {};
+  startingSkills.forEach((k) => { setupState.skills[k] = 0; });
+
+  const renderStats = () => {
+    setupAttrList.innerHTML = '';
+    setupAttrPoints.textContent = `Points: ${setupState.statPoints}`;
+    const rows = [
+      ['Strength (STR)', 'str'],
+      ['Agility (AGI)', 'agi'],
+      ['Intelligence (INT)', 'int'],
+      ['Vitality (VIT)', 'vit'],
+      ['Dexterity (DEX)', 'dex'],
+      ['Luck (LUK)', 'luck']
+    ];
+    rows.forEach(([label, key]) => {
+      const row = document.createElement('div');
+      row.className = 'row';
+      const name = document.createElement('span');
+      name.textContent = label;
+      const val = document.createElement('span');
+      val.textContent = setupState.stats[key] ?? 0;
+      val.style.fontWeight = '700';
+      val.style.textAlign = 'right';
+      const plus = document.createElement('button');
+      plus.textContent = '+';
+      plus.onclick = () => {
+        if (setupState.statPoints > 0) {
+          // Only base stats (no transcendence bonuses applied here)
+          const baseVal = player.stats?.[key] || 0;
+          const current = setupState.stats[key] ?? baseVal;
+          setupState.stats[key] = current + 1;
+          setupState.statPoints--;
+          renderStats();
+        }
+      };
+      row.appendChild(name);
+      row.appendChild(val);
+      row.appendChild(plus);
+      setupAttrList.appendChild(row);
+    });
+  };
+
+  const renderSkills = () => {
+    setupSkillList.innerHTML = '';
+    setupSkillPoints.textContent = `Skill Points: ${setupState.skillPoints}`;
+    startingSkills.forEach((key) => {
+      const row = document.createElement('div');
+      row.className = 'skill-row';
+      const radio = document.createElement('input');
+      radio.type = 'radio';
+      radio.name = 'setupSkill';
+      radio.value = key;
+      radio.checked = setupState.selectedSkill === key;
+      radio.onclick = () => { setupState.selectedSkill = key; };
+      const icon = document.createElement('img');
+      const skDef = SKILL_DB[key] || {};
+      icon.src = skDef.icon || 'assets/skill/basic.gif';
+      icon.alt = key;
+      icon.style.width = '36px';
+      icon.style.height = '36px';
+      icon.style.borderRadius = '8px';
+      icon.style.border = '1px solid #c4d7f5';
+      const infoBox = document.createElement('div');
+      infoBox.style.display = 'flex';
+      infoBox.style.flexDirection = 'column';
+      infoBox.style.gap = '.12rem';
+      const nameRow = document.createElement('div');
+      nameRow.style.display = 'flex';
+      nameRow.style.alignItems = 'center';
+      nameRow.style.gap = '.4rem';
+      const name = document.createElement('span');
+      name.textContent = skDef.name || key;
+      name.style.fontWeight = '700';
+      name.style.fontSize = '.92rem';
+      const metaRow = document.createElement('div');
+      metaRow.style.display = 'flex';
+      metaRow.style.alignItems = 'center';
+      metaRow.style.gap = '.45rem';
+      const elem = skDef.element || 'NEUTRAL';
+      const tier = skDef.tier ? `${skDef.tier}` : '';
+      const elemTag = document.createElement('span');
+      elemTag.textContent = [elem, tier].filter(Boolean).join(' ');
+      elemTag.style.fontWeight = '700';
+      elemTag.style.fontSize = '.7rem';
+      elemTag.style.padding = '.04rem .48rem';
+      elemTag.style.borderRadius = '999px';
+      elemTag.style.background = getElementColor(elem) + '20';
+      elemTag.style.color = getElementColor(elem);
+      const catTag = document.createElement('span');
+      catTag.textContent = skDef.category || 'Active';
+      catTag.style.opacity = '.78';
+      catTag.style.fontSize = '.74rem';
+      metaRow.appendChild(elemTag);
+      metaRow.appendChild(catTag);
+      nameRow.appendChild(name);
+      const desc = document.createElement('div');
+      desc.style.fontSize = '.74rem';
+      desc.style.opacity = '0.8';
+      desc.textContent = skDef.desc || 'Unlocked starting skill.';
+      infoBox.appendChild(nameRow);
+      infoBox.appendChild(metaRow);
+      infoBox.appendChild(desc);
+      const levelTag = document.createElement('span');
+      levelTag.textContent = 'Lv 1';
+      levelTag.style.fontWeight = '700';
+      row.appendChild(radio);
+      row.appendChild(icon);
+      row.appendChild(infoBox);
+      row.appendChild(levelTag);
+      setupSkillList.appendChild(row);
+    });
+  };
+
+  renderStats();
+  renderSkills();
+  setupModal.style.display = 'grid';
+}
+
+function closeInitialSetup() {
+  if (setupModal) setupModal.style.display = 'none';
+  if (topBar && prevTopBarDisplay !== null) {
+    topBar.style.display = prevTopBarDisplay;
+  }
+}
+
 function openNameModal(level) {
   pendingLeaderboardLevel = level;
   const transSummaryEl = document.getElementById('transRunSummary');
@@ -1266,6 +1434,18 @@ if (adminBtn) {
 if (resetBtn) {
   resetBtn.onclick = () => restartToTitle();
 }
+if (gearStats) {
+  gearStats.onclick = () => {
+    closeGearMenu();
+    if (!gameOver && gameLoopStarted) openOverlay('Stats');
+  };
+}
+if (gearReset) {
+  gearReset.onclick = () => {
+    closeGearMenu();
+    restartToTitle();
+  };
+}
 
 if (genderMaleRadio) {
   genderMaleRadio.onclick = () => applyGender('male');
@@ -1284,6 +1464,18 @@ if (rankingCloseBtn) {
 
 if (transCloseBtn) {
   transCloseBtn.onclick = () => closeTranscendenceModal();
+}
+
+if (gearBtn && gearMenu) {
+  gearBtn.onclick = (e) => {
+    e.stopPropagation();
+    const isOpen = gearMenu.style.display === 'flex';
+    gearMenu.style.display = isOpen ? 'none' : 'flex';
+  };
+  document.addEventListener('click', () => {
+    gearMenu.style.display = 'none';
+  });
+  gearMenu.onclick = (e) => e.stopPropagation();
 }
 
 if (transModal) {
@@ -1309,6 +1501,61 @@ if (transTabSkills && transTabOthers) {
 }
 
 updateTranscendenceUI();
+
+if (setupConfirmBtn) {
+  setupConfirmBtn.onclick = () => {
+    if (!setupState) return;
+    if (setupState.statPoints > 0 && !player.adminMode) {
+      alert('Spend all attribute points first.');
+      return;
+    }
+    if (!setupState.selectedSkill) {
+      alert('Choose a starting skill.');
+      return;
+    }
+    // Apply stats
+    player.stats = { ...player.stats, ...setupState.stats };
+    player.statPoints = setupState.statPoints;
+    // Reset and apply skill choice
+    player.skillLevel = {};
+    player.unlocks = {};
+    Object.keys(SKILL_DB).forEach((k) => {
+      player.skillLevel[k] = 0;
+      player.unlocks[k] = false;
+    });
+    player.skillLevel[setupState.selectedSkill] = 1;
+    player.unlocks[setupState.selectedSkill] = true;
+    player.skillPoints = player.adminMode ? setupState.skillPoints : 0;
+    closeInitialSetup();
+    // Begin game (pre-game setup complete)
+    preGameSetup = false;
+    gameStarted = true;
+    // Reset round & spawn state
+    round = 1;
+    killsThisRound = 0;
+    bossMode = false;
+    bossEntity = null;
+    monsters.length = 0;
+    spawnTimer = 0;
+    obstacles.length = 0;
+    resetObstaclesForRound(round, player);
+
+    paused = false;
+    pausedText.style.display = 'none';
+    resumeCountdown = 0;
+    msgTimer = 0;
+    msgDiv.innerHTML = '';
+
+    startGameLoop();
+  };
+}
+
+if (setupBackBtn) {
+  setupBackBtn.onclick = () => {
+    closeInitialSetup();
+    restartToTitle();
+  };
+}
 
 if (rankingModal) {
   rankingModal.addEventListener('click', (e) => {
@@ -1446,8 +1693,8 @@ titleStartBtn.onclick = () => {
   // Make the in-game top bar visible now (Character, Shop, etc.)
   if (topBar) topBar.style.display = 'flex';
 
-  // Open stats/skills panel for initial allocation
-  openOverlay('Stats');
+  // Show initial setup modal for stat/skill allocation
+  openInitialSetup();
 };
 
 // ========= INPUT =========
@@ -1566,6 +1813,10 @@ function openOverlay(tab) {
     pausedText.style.display = 'block';
   }
   getOverlay().open(tab);
+}
+
+function closeGearMenu() {
+  if (gearMenu) gearMenu.style.display = 'none';
 }
 
 

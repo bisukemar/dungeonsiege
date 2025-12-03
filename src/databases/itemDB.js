@@ -33,7 +33,7 @@ export const ITEMS_DB = [
     price: 15,
     rarity: 'Common',
     sprite: 'assets/item/cloth_bandana.gif',
-    desc: '+10 Max HP. A simple cloth to keep sweat off your eyes.',
+    desc: ' Max HP. A simple cloth to keep sweat off your eyes.',
     bonuses: { 
       maxHp: 10 
     }
@@ -140,7 +140,7 @@ export const ITEMS_DB = [
     price: 15,
     rarity: 'Common',
     sprite: 'assets/item/wool_beanie.gif',
-    desc: '+5 HP. A cozy knit beanie for chilly mornings.',
+    desc: ' Max HP. A cozy knit beanie for chilly mornings.',
     bonuses: { maxHp: 5 }
   },
   {
@@ -188,7 +188,7 @@ export const ITEMS_DB = [
     price: 30,
     rarity: 'Common',
     sprite: 'assets/item/cloth_robe.gif',
-    desc: '+20 Max HP. Simple robe offering light protection.',
+    desc: ' Max HP. Simple robe offering light protection.',
     bonuses: { 
       maxHp: 20
      }
@@ -200,7 +200,7 @@ export const ITEMS_DB = [
     price: 30,
     rarity: 'Uncommon',
     sprite: 'assets/item/leather_armor.gif',
-    desc: '+30 Max HP. Sturdy leather armor for frontline trainees.',
+    desc: ' Max HP. Sturdy leather armor for frontline trainees.',
     bonuses: { 
       maxHp: 30
      }
@@ -212,7 +212,7 @@ export const ITEMS_DB = [
     price: 30,
     rarity: 'Rare', // was Uncommon; now Rare to match +2 skill levels
     sprite: 'assets/item/padded_vest.gif',
-    desc: '+30 Max HP, +1 Bash level. Extra padding for practicing heavy strikes.',
+    desc: ' Max HP, +1 Bash level. Extra padding for practicing heavy strikes.',
     bonuses: {
       maxHp: 25,
       skill: { Bash: 1 }
@@ -226,7 +226,7 @@ export const ITEMS_DB = [
     price: 420,
     shopAvailable: false,
     sprite: 'assets/item/tidal_robe.gif',
-    desc: '+35 Max HP, +3 VIT, +2 Ice level. Robes imbued with the chill of rolling tides.',
+    desc: ' Max HP, +3 VIT, +2 Ice level. Robes imbued with the chill of rolling tides.',
     bonuses: {
       maxHp: 35,
       vit: 2,
@@ -240,7 +240,7 @@ export const ITEMS_DB = [
     price: 30,
     rarity: 'Common',
     sprite: 'assets/item/padded_jerkin.gif',
-    desc: '+10 HP. Light padding for novice adventurers.',
+    desc: ' Max HP. Light padding for novice adventurers.',
     bonuses: { maxHp: 10 }
   },
   {
@@ -270,7 +270,7 @@ export const ITEMS_DB = [
     price: 120,
     rarity: 'Uncommon',
     sprite: 'assets/item/layered_jerkin.gif',
-    desc: '+15 HP, +1 VIT. Extra layers for staying power.',
+    desc: ' Max HP, +1 VIT. Extra layers for staying power.',
     bonuses: { maxHp: 15, vit: 1 }
   },
   {
@@ -290,7 +290,7 @@ export const ITEMS_DB = [
     price: 260,
     rarity: 'Rare',
     sprite: 'assets/item/runed_brigandine.gif',
-    desc: '+40 HP, +2 DEF. Reinforced plates etched with wards.',
+    desc: ' Max HP, +2 DEF. Reinforced plates etched with wards.',
     bonuses: { maxHp: 40, defense: 2 }
   },
   {
@@ -300,7 +300,7 @@ export const ITEMS_DB = [
     price: 250,
     rarity: 'Rare',
     sprite: 'assets/item/siren_vestments.gif',
-    desc: '+2 VIT, +25 HP. Flowing vestments that steady the breath.',
+    desc: '+2 VIT,  Max HP. Flowing vestments that steady the breath.',
     bonuses: { vit: 2, maxHp: 25 }
   },
   {
@@ -310,7 +310,7 @@ export const ITEMS_DB = [
     price: 620,
     rarity: 'Legendary',
     sprite: 'assets/item/arcanist_plate.gif',
-    desc: '+50 HP, +2 DEF, +2 INT. Plate etched with arcane sigils.',
+    desc: ' Max HP, +2 DEF, +2 INT. Plate etched with arcane sigils.',
     bonuses: { maxHp: 50, defense: 2, int: 2 }
   },
   {
@@ -330,7 +330,7 @@ export const ITEMS_DB = [
     price: 640,
     rarity: 'Legendary',
     sprite: 'assets/item/juggernaut_cuirass.gif',
-    desc: '+60 HP, +2 STR, +2 VIT, +2 DEF. Heavy cuirass for unstoppable fronts.',
+    desc: ' Max HP, +2 STR, +2 VIT, +2 DEF. Heavy cuirass for unstoppable fronts.',
     bonuses: { maxHp: 60, str: 2, vit: 2, defense: 2 }
   },
 
@@ -495,7 +495,7 @@ export const ITEMS_DB = [
     price: 25,
     rarity: 'Common',
     sprite: 'assets/item/wooden_shield.gif',
-    desc: '+0.5 Def. +10 Max HP. A crude shield carved from sturdy planks.',
+    desc: '+0.5 Def.  Max HP. A crude shield carved from sturdy planks.',
     bonuses: { 
       defense: 0.5,
       maxHp: 10 
@@ -508,7 +508,7 @@ export const ITEMS_DB = [
     price: 25,
     rarity: 'Uncommon',
     sprite: 'assets/item/buckler.gif',
-    desc: '+15 Max HP. +1 Agi. A light buckler that keeps you nimble.',
+    desc: ' Max HP. +1 Agi. A light buckler that keeps you nimble.',
     bonuses: { 
       maxHp: 15,
       defense: 1 
@@ -521,7 +521,7 @@ export const ITEMS_DB = [
     price: 25,
     rarity: 'Uncommon',
     sprite: 'assets/item/round_guard.gif',
-    desc: '+20 Max HP, +2 DEF. A well-balanced shield that guards and steadies you.',
+    desc: ' Max HP, +2 DEF. A well-balanced shield that guards and steadies you.',
     bonuses: {
       maxHp: 20,
       defense: 2
@@ -554,7 +554,7 @@ export const ITEMS_DB = [
     price: 25,
     rarity: 'Common',
     sprite: 'assets/item/reed_guard.gif',
-    desc: '+6 HP. Woven reeds offer a touch of padding.',
+    desc: ' Max HP. Woven reeds offer a touch of padding.',
     bonuses: { maxHp: 6 }
   },
   {
@@ -574,7 +574,7 @@ export const ITEMS_DB = [
     price: 115,
     rarity: 'Uncommon',
     sprite: 'assets/item/hide_kite.gif',
-    desc: '+12 HP, +0.5 DEF. Tough hide stretched over a sturdy frame.',
+    desc: ' Max HP, +0.5 DEF. Tough hide stretched over a sturdy frame.',
     bonuses: { maxHp: 12, defense: 0.5 }
   },
   {
@@ -584,7 +584,7 @@ export const ITEMS_DB = [
     price: 260,
     rarity: 'Rare',
     sprite: 'assets/item/bulwark_plate.gif',
-    desc: '+3 DEF, +20 HP. Heavy plate shield for steadfast defense.',
+    desc: '+3 DEF,  Max HP. Heavy plate shield for steadfast defense.',
     bonuses: { defense: 3, maxHp: 20 }
   },
   {
@@ -594,7 +594,7 @@ export const ITEMS_DB = [
     price: 250,
     rarity: 'Rare',
     sprite: 'assets/item/tide_ward.gif',
-    desc: '+2 DEF, +15 HP. Shell-like ward that shrugs off blows.',
+    desc: '+2 DEF,  Max HP. Shell-like ward that shrugs off blows.',
     bonuses: { defense: 2, maxHp: 15 }
   },
   {
@@ -604,7 +604,7 @@ export const ITEMS_DB = [
     price: 620,
     rarity: 'Legendary',
     sprite: 'assets/item/aegis_of_embers.gif',
-    desc: '+4 DEF, +30 HP. Shield warm to the touch, warding and searing.',
+    desc: '+4 DEF,  Max HP. Shield warm to the touch, warding and searing.',
     bonuses: { defense: 4, maxHp: 30 }
   },
   {
@@ -624,7 +624,7 @@ export const ITEMS_DB = [
     price: 640,
     rarity: 'Legendary',
     sprite: 'assets/item/titan_guard.gif',
-    desc: '+5 DEF, +40 HP. Massive guard that anchors the line.',
+    desc: '+5 DEF,  Max HP. Massive guard that anchors the line.',
     bonuses: { defense: 5, maxHp: 40 }
   },
 
@@ -650,7 +650,7 @@ export const ITEMS_DB = [
     price: 20,
     rarity: 'Uncommon',
     sprite: 'assets/item/traveler_mantle.gif',
-    desc: '+1 DEF, +5 HP. A sturdy mantle favored by long-distance wanderers.',
+    desc: '+1 DEF,  Max HP. A sturdy mantle favored by long-distance wanderers.',
     bonuses: { defense: 1, hp: 5 }
   },
   {
@@ -673,7 +673,7 @@ export const ITEMS_DB = [
     price: 20,
     rarity: 'Common',
     sprite: 'assets/item/twine_sash.gif',
-    desc: '+8 HP. Simple twine belt offering slight support.',
+    desc: ' Max HP. Simple twine belt offering slight support.',
     bonuses: { maxHp: 8 }
   },
   {
@@ -733,7 +733,7 @@ export const ITEMS_DB = [
     price: 245,
     rarity: 'Rare',
     sprite: 'assets/item/verdant_wrap.gif',
-    desc: '+2 VIT, +20 HP. Wrap lush with life-giving fibers.',
+    desc: '+2 VIT,  Max HP. Wrap lush with life-giving fibers.',
     bonuses: { vit: 2, maxHp: 20 }
   },
   {
@@ -860,7 +860,7 @@ export const ITEMS_DB = [
     price: 30,
     rarity: 'Common',
     sprite: 'assets/item/soft_moccasins.gif',
-    desc: '+6 HP. Cushioned soles ease every step.',
+    desc: ' Max HP. Cushioned soles ease every step.',
     bonuses: { maxHp: 6 }
   },
   {
@@ -880,7 +880,7 @@ export const ITEMS_DB = [
     price: 100,
     rarity: 'Uncommon',
     sprite: 'assets/item/cushioned_greaves.gif',
-    desc: '+10 HP, +0.5 DEF. Padded greaves to soften the march.',
+    desc: ' Max HP, +0.5 DEF. Padded greaves to soften the march.',
     bonuses: { maxHp: 10, defense: 0.5 }
   },
   {
@@ -900,7 +900,7 @@ export const ITEMS_DB = [
     price: 235,
     rarity: 'Rare',
     sprite: 'assets/item/stone_treads.gif',
-    desc: '+1.5 DEF, +15 HP. Heavy treads that root you in place.',
+    desc: '+1.5 DEF,  Max HP. Heavy treads that root you in place.',
     bonuses: { defense: 1.5, maxHp: 15 }
   },
   {
@@ -930,7 +930,7 @@ export const ITEMS_DB = [
     price: 530,
     rarity: 'Legendary',
     sprite: 'assets/item/ironclad_boots.gif',
-    desc: '+2 DEF, +25 HP, +1 STR. Boots that brace every impact.',
+    desc: '+2 DEF,  Max HP, +1 STR. Boots that brace every impact.',
     bonuses: { defense: 2, maxHp: 25, str: 1 }
   },
 
@@ -1235,7 +1235,7 @@ export const ITEMS_DB = [
     price: 650,
     shopAvailable: false,
     sprite: 'assets/item/phoenix_charm.gif',
-    desc: '+60 HP, +1 HP Regen level, +15% crit damage. Revives you once after a short countdown.',
+    desc: ' Max HP,  Max HP Regen level, +15% crit damage. Revives you once after a short countdown.',
     bonuses: {
       maxHp: 60,
       critDamage: 0.15,

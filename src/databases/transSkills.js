@@ -2,7 +2,7 @@ export const TRANSCENDENCE_SKILLS = [
   {
     id: 'eternalStrength',
     name: 'Eternal Strength',
-    icon: 'assets/skill/Quagmire.gif',
+    icon: 'assets/skill/t_eternalStrength.png',
     desc: 'Permanent training that hardens muscle and spirit.',
     currentEffect: (lvl) => `+${lvl} STR`,
     nextEffect: (lvl) => `+${lvl + 1} STR`,
@@ -12,7 +12,7 @@ export const TRANSCENDENCE_SKILLS = [
   {
     id: 'arcaneWisdom',
     name: 'Arcane Wisdom',
-    icon: 'assets/skill/Quagmire.gif',
+    icon: 'assets/skill/t_arcaneWisdom.png',
     desc: 'Mind sharpened by countless incantations.',
     currentEffect: (lvl) => `+${lvl} INT`,
     nextEffect: (lvl) => `+${lvl + 1} INT`,
@@ -22,7 +22,7 @@ export const TRANSCENDENCE_SKILLS = [
   {
     id: 'unyieldingVitality',
     name: 'Unyielding Vitality',
-    icon: 'assets/skill/Quagmire.gif',
+    icon: 'assets/skill/t_unyieldingVitality.png',
     desc: 'Life force fortified beyond mortal limits.',
     currentEffect: (lvl) => `+${lvl} VIT`,
     nextEffect: (lvl) => `+${lvl + 1} VIT`,
@@ -32,7 +32,7 @@ export const TRANSCENDENCE_SKILLS = [
   {
     id: 'fleetfoot',
     name: 'Fleetfoot',
-    icon: 'assets/skill/Quagmire.gif',
+    icon: 'assets/skill/t_fleetfoot.png',
     desc: 'Stride with transcendent speed.',
     currentEffect: (lvl) => `+${lvl} AGI`,
     nextEffect: (lvl) => `+${lvl + 1} AGI`,
@@ -42,7 +42,7 @@ export const TRANSCENDENCE_SKILLS = [
   {
     id: 'finesse',
     name: 'Finesse',
-    icon: 'assets/skill/Quagmire.gif',
+    icon: 'assets/skill/t_finesse.png',
     desc: 'Hands guided by steady focus.',
     currentEffect: (lvl) => `+${lvl} DEX`,
     nextEffect: (lvl) => `+${lvl + 1} DEX`,
@@ -52,7 +52,7 @@ export const TRANSCENDENCE_SKILLS = [
   {
     id: 'charm',
     name: 'Charm',
-    icon: 'assets/skill/Quagmire.gif',
+    icon: 'assets/skill/t_charm.png',
     desc: 'Fortune favors the captivating.',
     currentEffect: (lvl) => `+${lvl} LUK`,
     nextEffect: (lvl) => `+${lvl + 1} LUK`,
@@ -62,7 +62,7 @@ export const TRANSCENDENCE_SKILLS = [
   {
     id: 'magneticCore',
     name: 'Magnetic Core',
-    icon: 'assets/skill/Quagmire.gif',
+    icon: 'assets/skill/t_magneticcore.png',
     desc: 'A transcendent pull that draws loot closer.',
     currentEffect: (lvl) => `+${(lvl * 18).toFixed(0)} pickup range`,
     nextEffect: (lvl) => `+${((lvl + 1) * 18).toFixed(0)} pickup range`,
@@ -72,7 +72,7 @@ export const TRANSCENDENCE_SKILLS = [
   {
     id: 'echoesOfFortune',
     name: 'Echoes of Fortune',
-    icon: 'assets/skill/Quagmire.gif',
+    icon: 'assets/skill/t_echoes.gif',
     desc: 'Echoes of fortune linger on every drop.',
     currentEffect: (lvl) => `+${(lvl * 2).toFixed(0)}% gold gained`,
     nextEffect: (lvl) => `+${((lvl + 1) * 2).toFixed(0)}% gold gained`,
@@ -82,7 +82,7 @@ export const TRANSCENDENCE_SKILLS = [
   {
     id: 'compulsaryDiscount',
     name: 'Compulsary Discount',
-    icon: 'assets/skill/Quagmire.gif',
+    icon: 'assets/skill/t_dc.png',
     desc: 'Vendors feel oddly generous toward you.',
     currentEffect: (lvl) => `+${(lvl * 2).toFixed(0)}% shop discount`,
     nextEffect: (lvl) => `+${((lvl + 1) * 2).toFixed(0)}% shop discount`,
@@ -92,7 +92,7 @@ export const TRANSCENDENCE_SKILLS = [
   {
     id: 'treasureMaster',
     name: 'Treasure Master',
-    icon: 'assets/skill/Quagmire.gif',
+    icon: 'assets/skill/t_treasure.png',
     desc: 'You know every trick to pry better loot from chests.',
     currentEffect: (lvl) => `-${30 * lvl}g boss chest re-roll cost`,
     nextEffect: (lvl) => `-${30 * (lvl + 1)}g boss chest re-roll cost`,

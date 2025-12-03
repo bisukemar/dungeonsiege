@@ -135,7 +135,7 @@
       border-color: #d89999;
       background: linear-gradient(180deg, #fff1f1 0%, #f0c2c2 100%);
       color: #5a1212;
-      display: none;
+      display: inline-block;
     }
 
     #topBar button#resetBtn:hover {
@@ -150,19 +150,58 @@
         left: calc(8px + env(safe-area-inset-left, 0px));
         top: calc(8px + env(safe-area-inset-top, 0px));
       }
-      #topBar {
-        flex-direction: column;
-        align-items: flex-end;
+      #topBarDesktop { display: none; }
+      #topBarMobile {
+        display: flex;
+        position: relative;
       }
-      #topBar button {
-        font-size: 0.95rem;
-        padding: 0.4rem 0.9rem;
-        width: 160px;
+      #gearBtn {
+        padding: 0.2rem;
+        border-radius: 10px;
+        border: 1px solid var(--ro-panel-edge);
+        background: rgba(255,255,255,0.9);
+        cursor: pointer;
+        box-shadow: 0 3px 12px rgba(13, 31, 64, 0.2);
+        display: flex;
+        align-items: center;
         justify-content: center;
       }
-      #topBar button#resetBtn {
-        display: inline-flex;
+      #gearBtn img {
+        width: 22px;
+        height: 22px;
+        display: block;
       }
+      #gearMenu {
+        position: absolute;
+        top: calc(100% + 6px);
+        right: 0;
+        display: none;
+        flex-direction: column;
+        gap: 0.35rem;
+        padding: 0.5rem;
+        border-radius: 0.8rem;
+        border: 1px solid #9ab9e8;
+        background: rgba(255,255,255,0.98);
+        box-shadow: 0 12px 28px rgba(13, 31, 64, 0.25);
+        min-width: 160px;
+        z-index: 140;
+      }
+      #gearMenu button {
+        padding: 0.4rem 0.6rem;
+        border-radius: 10px;
+        border: 1px solid #9ab9e8;
+        background: linear-gradient(180deg, #ffffff 0%, #d7e8ff 100%);
+        color: #16315c;
+        font-weight: 700;
+        cursor: pointer;
+        width: 100%;
+        text-align: left;
+      }
+    }
+
+    @media (min-width: 961px) {
+      #topBarMobile { display: none; }
+      #topBarDesktop { display: flex; gap: 0.5rem; }
     }
 
     /* Overlay container (panel content is built by ui.js) */
@@ -530,19 +569,21 @@
 
     .trans-skill-card {
       display: grid;
-      grid-template-columns: 52px 1fr;
-      gap: 0.5rem;
-      padding: 0.55rem;
-      border: 1px solid #d6e4fb;
-      border-radius: 0.9rem;
-      background: linear-gradient(180deg, #fdfdff 0%, #e8f1fb 70%);
+      grid-template-columns: 46px minmax(0,1fr) auto;
+      column-gap: 0.5rem;
+      row-gap: 0.25rem;
+      align-items: start;
+      padding: 0.6rem 0.65rem;
+      border: 1px solid #b8cff1;
+      border-radius: 0.65rem;
+      background: rgba(255,255,255,0.95);
       box-shadow: inset 0 1px 0 rgba(255,255,255,0.8);
     }
 
     .trans-skill-card img {
-      width: 52px;
-      height: 52px;
-      border-radius: 12px;
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
       border: 1px solid #c4d7f5;
       object-fit: cover;
       background: #fff;
@@ -599,6 +640,117 @@
     .trans-skill-actions button:disabled {
       opacity: 0.55;
       cursor: not-allowed;
+    }
+
+    /* Initial setup modal */
+    #initialSetupModal {
+      position: absolute;
+      inset: 0;
+      display: none;
+      place-items: center;
+      background: rgba(12, 27, 58, 0.38);
+      z-index: 70;
+      backdrop-filter: blur(3px);
+    }
+
+    .setup-card {
+      width: 760px;
+      max-width: 96vw;
+      max-height: 90vh;
+      overflow: auto;
+      background: linear-gradient(180deg, #fdfdff 0%, #dfeaf9 60%, #c8dcf6 100%);
+      border: 2px solid #7da8d9;
+      border-radius: 1rem;
+      padding: 1rem 1.1rem;
+      box-shadow: var(--ro-shadow);
+      color: var(--ro-ink-strong);
+      font-size: 0.8rem;
+    }
+
+    .setup-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 0.8rem;
+    }
+
+    .setup-attrs #setupAttrList,
+    .setup-skills #setupSkillList {
+      max-height: 55vh;
+      overflow-y: auto;
+    }
+
+    .setup-section h4 {
+      margin: 0 0 .4rem;
+      font-size: 0.95rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .setup-attrs .row {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.35rem 0.45rem;
+      border-radius: 0.6rem;
+      border: 1px solid #b8cff1;
+      background: #fff;
+      margin-bottom: 0.3rem;
+    }
+
+    .setup-attrs button {
+      width: 32px;
+      height: 32px;
+      border-radius: 12px;
+      border: 1px solid #9ab9e8;
+      background: linear-gradient(180deg, #ffffff 0%, #d7e8ff 100%);
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    .setup-skills .skill-row {
+      display: grid;
+      grid-template-columns: auto 52px minmax(0,1fr) auto;
+      column-gap: 0.55rem;
+      row-gap: 0.3rem;
+      align-items: start;
+      padding: 0.7rem 0.75rem;
+      border-radius: 0.65rem;
+      border: 1px solid #b8cff1;
+      background: rgba(255,255,255,0.95);
+      margin-bottom: 0.35rem;
+    }
+
+    .setup-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.5rem;
+      margin-top: 0.6rem;
+    }
+
+    #setupConfirmBtn {
+      padding: 0.55rem 1rem;
+      border-radius: 12px;
+      border: 1px solid #7da8d9;
+      background: linear-gradient(180deg, #ffffff 0%, #cde0f8 100%);
+      color: #16315c;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      box-shadow: 0 8px 18px rgba(20, 49, 101, 0.18);
+    }
+    #setupBackBtn {
+      padding: 0.55rem 1rem;
+      border-radius: 12px;
+      border: 1px solid #7da8d9;
+      background: linear-gradient(180deg, #ffffff 0%, #cde0f8 100%);
+      color: #16315c;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      box-shadow: 0 8px 18px rgba(20, 49, 101, 0.18);
     }
 
     @media (max-width: 780px) {
@@ -698,9 +850,20 @@
 
   <!-- Top in-game controls (shown only after setup) -->
   <div id="topBar">
-    <button id="statsBtn">Character</button>
-    <button id="resetBtn" aria-label="Reset to Title">Reset</button>
-    <button id="adminBtn">Admin</button>
+    <div id="topBarDesktop">
+      <button id="statsBtn">Character</button>
+      <button id="resetBtn" aria-label="Exit to Title">Exit to Title</button>
+      <button id="adminBtn">Admin</button>
+    </div>
+    <div id="topBarMobile">
+      <button id="gearBtn" aria-label="Open Menu">
+        <img src="./assets/settings.png" alt="Settings" />
+      </button>
+      <div id="gearMenu">
+        <button id="gearStats">Character</button>
+        <button id="gearReset">Exit to Title</button>
+      </div>
+    </div>
   </div>
 
   <!-- Overlay that ui.js uses -->
@@ -835,6 +998,34 @@
       </div>
       <div class="title-hint">
         Local runs only. Highest level reached wins.
+      </div>
+    </div>
+  </div>
+
+  <div id="initialSetupModal">
+    <div class="setup-card">
+      <div style="display:flex;flex-direction:column;gap:0.15rem;margin-bottom:0.6rem;">
+        <h3 style="margin:0;">Allocate Starting Attributes & Skill</h3>
+        <div style="font-size:0.85rem; opacity:0.85;">
+          Spend all starting attribute points and choose one starting skill to begin Round 1.
+        </div>
+        <div style="height:1px;background:#b8cff1;opacity:0.5;margin:0.8rem 0;"></div>
+      </div>
+      <div class="setup-grid">
+        <div class="setup-section setup-attrs">
+          <h4>Attributes</h4>
+          <div id="setupAttrPoints" style="margin-bottom:0.35rem;font-weight:700;">Points: 0</div>
+          <div id="setupAttrList"></div>
+        </div>
+        <div class="setup-section setup-skills">
+          <h4>Starting Skill</h4>
+          <div id="setupSkillPoints" style="margin-bottom:0.35rem;font-weight:700;">Skill Points: 0</div>
+          <div id="setupSkillList"></div>
+        </div>
+      </div>
+      <div class="setup-actions">
+        <button id="setupBackBtn" class="secondary" style="padding: 0.55rem 1rem; border-radius: 12px; border: 1px solid #7da8d9; background: linear-gradient(180deg, #ffffff 0%, #cde0f8 100%); color: #16315c; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; box-shadow: 0 8px 18px rgba(20, 49, 101, 0.18);">Back to Title</button>
+        <button id="setupConfirmBtn" class="secondary">Confirm</button>
       </div>
     </div>
   </div>

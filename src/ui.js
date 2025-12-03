@@ -787,6 +787,11 @@ export function makeOverlay(doc, player, onClose, opts = {}){
   equipCard.appendChild(equipGrid);
 
   const equipUI = {};
+  function adjustHpAfterEquip(prevMax, prevHp) {
+    const newMax = typeof player.getMaxHp === 'function' ? player.getMaxHp() : prevMax;
+    const frac = prevMax > 0 ? prevHp / prevMax : 1;
+    player.hp = Math.min(newMax, Math.max(1, Math.round(newMax * frac)));
+  }
 
   function makeEquipRow(slotKey){
     const row = doc.createElement('div');
@@ -819,9 +824,12 @@ export function makeOverlay(doc, player, onClose, opts = {}){
     row.onclick = () => {
       const it = player.equip?.[slotKey];
       if (!it) return;
+      const prevMax = typeof player.getMaxHp === 'function' ? player.getMaxHp() : player.hp;
+      const prevHp = player.hp;
       if (!player.inventory) player.inventory = [];
       player.inventory.push(it);
       player.equip[slotKey] = null;
+      adjustHpAfterEquip(prevMax, prevHp);
       updateAll();
     };
 
@@ -1560,11 +1568,14 @@ export function makeOverlay(doc, player, onClose, opts = {}){
         ev.stopPropagation();
         if (!it.slot) return;
         if (!player.equip) player.equip = {};
+        const prevMax = typeof player.getMaxHp === 'function' ? player.getMaxHp() : player.hp;
+        const prevHp = player.hp;
         const slot = it.slot;
         const old = player.equip[slot];
         player.equip[slot] = it;
         player.inventory.splice(idx, 1);
         if (old) player.inventory.push(old);
+        adjustHpAfterEquip(prevMax, prevHp);
         updateAll();
       };
 
@@ -1877,55 +1888,143 @@ export function makeOverlay(doc, player, onClose, opts = {}){
     skillPointsLabel.textContent = `Unspent Skill Points: ${kp}`;
 
     // derived stats
-    const cc = typeof player.getCritChance === 'function' ? player.getCritChance() : 0;
-    const cd = typeof player.getCritDamage === 'function' ? player.getCritDamage() : 1.5;
-    const ms = typeof player.getMoveSpeed === 'function' ? player.getMoveSpeed() : 0;
-    const atkCd = typeof player.getAttackCooldown === 'function' ? player.getAttackCooldown() : 0;
-    const atkSpd = atkCd > 0 ? (60 / atkCd) : 0;
-    const luck = typeof player.getTotalStat === 'function' ? player.getTotalStat('luck') : ((player.stats && player.stats.luck) || 0);
-    const vw = doc.defaultView ? doc.defaultView.innerWidth : 800;
-    const vh = doc.defaultView ? doc.defaultView.innerHeight : 600;
-    const screenRadius = Math.hypot(vw, vh) / 2;
-    const basePickup = (player.r || 0) + 10;
-    const extraPerLuck = screenRadius / 99;
-    const pickupRadius = Math.min(screenRadius, basePickup + luck * extraPerLuck);
-    const defense = typeof player.getDefense === 'function' ? player.getDefense() : (player.defense || 0);
+    // DERIVED STATS WITH BREAKDOWN (base, gear, transcendence)
+    const gearStats = typeof player.getGearStatBonuses === 'function'
+      ? player.getGearStatBonuses()
+      : { str:0, agi:0, vit:0, int:0, dex:0, luck:0 };
+    const transStats = player.transcendenceBonuses?.stats || {};
+    const transDerived = player.transcendenceBonuses || {};
 
-    // helper to format base + bonus with colored bonus
-    const formatBaseBonus = (base, total, suffix='') => {
-      const bonus = Math.max(0, total - base);
-      const baseTxt = `${base}${suffix}`;
-      const bonusTxt = bonus > 0 ? ` <span style="color:#16a34a;">(+${bonus}${suffix})</span>` : '';
-      return baseTxt + bonusTxt;
+    const aggregateGearDerived = () => {
+      const g = { moveSpeed:0, critChance:0, critDamage:0, attackCooldown:0, attackSpeed:0, defense:0, maxHp:0 };
+      if (!player.equip) return g;
+      Object.values(player.equip).forEach((it) => {
+        if (!it?.bonuses) return;
+        const b = it.bonuses;
+        if (b.moveSpeed) g.moveSpeed += b.moveSpeed;
+        if (b.critChance) g.critChance += b.critChance;
+        if (b.critDamage) g.critDamage += b.critDamage;
+        if (b.hasOwnProperty('attackCooldown')) g.attackCooldown += b.attackCooldown;
+        if (b.hasOwnProperty('attackSpeed')) g.attackSpeed += b.attackSpeed;
+        if (b.defense) g.defense += b.defense;
+        if (b.maxHp) g.maxHp += b.maxHp;
+      });
+      return g;
     };
 
-    // Crit chance: base from LUK + 5%, bonus = gear/skills (cap-aware)
-    const baseCrit = Math.min(0.8, 0.05 + luck * 0.003);
-    const bonusCrit = Math.max(0, cc - baseCrit);
+    const gearDerived = aggregateGearDerived();
+
+    const computeDerived = (includeGear, includeTrans) => {
+      const statVal = (k) => (player.stats?.[k] || 0)
+        + (includeGear ? (gearStats[k] || 0) : 0)
+        + (includeTrans ? (transStats[k] || 0) : 0);
+
+      const luck = statVal('luck');
+      const agi = statVal('agi');
+      const dex = statVal('dex');
+      const vit = statVal('vit');
+      const intStat = statVal('int');
+
+      // Crit chance/damage
+      let critChance = 0.05 + luck * 0.003;
+      if (includeGear) critChance += gearDerived.critChance;
+      if (critChance > 0.8) critChance = 0.8;
+      let critDamage = 1.5 + (includeGear ? gearDerived.critDamage : 0);
+
+      // Move speed
+      let moveSpeed = 2.4 + (includeGear ? gearDerived.moveSpeed : 0);
+      if (includeTrans && transDerived.moveSpeedPct) moveSpeed *= (1 + transDerived.moveSpeedPct);
+      if (moveSpeed < 1.2) moveSpeed = 1.2;
+      if (moveSpeed > 5.5) moveSpeed = 5.5;
+
+      // Attack speed (via cooldown)
+      let cd = 60 - agi;
+      if (includeGear) {
+        cd += gearDerived.attackCooldown;
+        cd -= gearDerived.attackSpeed || 0;
+      }
+      if (cd < 4) cd = 4;
+      const attackSpeed = cd > 0 ? (60 / cd) : 0;
+
+      // Defense
+      const defense = includeGear ? gearDerived.defense : 0;
+
+      // Pickup radius
+      const vw = doc.defaultView ? doc.defaultView.innerWidth : 800;
+      const vh = doc.defaultView ? doc.defaultView.innerHeight : 600;
+      const screenRadius = Math.hypot(vw, vh) / 2;
+      const basePickup = (player.r || 0) + 10;
+      const extraPerLuck = screenRadius / 99;
+      let pickupRadius = basePickup + luck * extraPerLuck;
+      if (includeTrans && transDerived.pickupRadius) pickupRadius += transDerived.pickupRadius;
+      if (pickupRadius > screenRadius) pickupRadius = screenRadius;
+
+      // Skill range (dex-based)
+      const rangeArrow = 240 + Math.min(40, dex) * 12;
+      const rangeFire = 200 + Math.min(40, dex) * 12;
+      const skillRange = Math.round((rangeArrow + rangeFire) / 2);
+
+      // Bonus HP (items/skills/trans)
+      const baseHp = PLAYER_BASE_HP + vit * HP_PER_VIT;
+      let totalHp = baseHp + (includeGear ? gearDerived.maxHp : 0);
+      if (includeTrans && transDerived.maxHpPct) totalHp *= (1 + transDerived.maxHpPct);
+      const bonusHp = Math.max(0, totalHp - (PLAYER_BASE_HP + vit * HP_PER_VIT));
+
+      return { critChance, critDamage, moveSpeed, attackSpeed, pickupRadius, defense, skillRange, bonusHp, totalHp };
+    };
+
+    const baseDer = computeDerived(false, false);
+    const gearDer = computeDerived(true, false);
+    const totalDer = computeDerived(true, true);
+
+    const fmt = (base, gearBonus, transBonus, suffix='') => {
+      const parts = [`${base}${suffix}`];
+      if (gearBonus) parts.push(`<span style="color:#16a34a;">(+${gearBonus}${suffix})</span>`);
+      if (transBonus) parts.push(`<span style="color:#eab308;">(+${transBonus}${suffix})</span>`);
+      return parts.join(' ');
+    };
+
     if (statRows.critChance) {
-      statRows.critChance.innerHTML = `${(baseCrit * 100).toFixed(1)}%` +
-        (bonusCrit > 0 ? ` <span style="color:#16a34a;">(+${(bonusCrit * 100).toFixed(1)}%)</span>` : '');
+      const base = (baseDer.critChance * 100).toFixed(1);
+      const gear = Math.max(0, (gearDer.critChance - baseDer.critChance) * 100).toFixed(1);
+      const trans = Math.max(0, (totalDer.critChance - gearDer.critChance) * 100).toFixed(1);
+      statRows.critChance.innerHTML = fmt(base, gear > 0 ? gear : 0, trans > 0 ? trans : 0, '%');
     }
 
-    // Crit damage: base 1.5x
-    const baseCd = 1.5;
-    const bonusCd = Math.max(0, cd - baseCd);
     if (statRows.critDamage) {
-      statRows.critDamage.innerHTML = `${baseCd.toFixed(2)}x` +
-        (bonusCd > 0 ? ` <span style="color:#16a34a;">(+${bonusCd.toFixed(2)}x)</span>` : '');
+      const base = Math.round((baseDer.critDamage - 1) * 100);
+      const gear = Math.max(0, Math.round((gearDer.critDamage - baseDer.critDamage) * 100));
+      const trans = Math.max(0, Math.round((totalDer.critDamage - gearDer.critDamage) * 100));
+      statRows.critDamage.innerHTML = fmt(base, gear, trans, '%');
     }
 
-    // Move speed: fixed base; only gear bonuses apply
-    const baseMs = 2.4;
-    const bonusMs = Math.max(0, ms - baseMs);
     if (statRows.moveSpeed) {
-      statRows.moveSpeed.innerHTML = `${baseMs.toFixed(2)} u/f` +
-        (bonusMs > 0.0001 ? ` <span style="color:#16a34a;">(+${bonusMs.toFixed(2)})</span>` : '');
+      const base = baseDer.moveSpeed.toFixed(2);
+      const gear = (gearDer.moveSpeed - baseDer.moveSpeed).toFixed(2);
+      const trans = (totalDer.moveSpeed - gearDer.moveSpeed).toFixed(2);
+      statRows.moveSpeed.innerHTML = fmt(base, parseFloat(gear) ? gear : 0, parseFloat(trans) ? trans : 0, '');
     }
 
-    if (statRows.attackSpeed) statRows.attackSpeed.textContent = `${atkSpd.toFixed(2)} /s`;
-    if (statRows.pickupRadius) statRows.pickupRadius.textContent = `${Math.round(pickupRadius)} px`;
-    if (statRows.defense) statRows.defense.textContent = `${defense}`;
+    if (statRows.attackSpeed) {
+      const base = baseDer.attackSpeed.toFixed(2);
+      const gear = (gearDer.attackSpeed - baseDer.attackSpeed).toFixed(2);
+      const trans = (totalDer.attackSpeed - gearDer.attackSpeed).toFixed(2);
+      statRows.attackSpeed.innerHTML = fmt(base, parseFloat(gear) ? gear : 0, parseFloat(trans) ? trans : 0, ' /s');
+    }
+
+    if (statRows.pickupRadius) {
+      const base = Math.round(baseDer.pickupRadius);
+      const gear = Math.round(gearDer.pickupRadius - baseDer.pickupRadius);
+      const trans = Math.round(totalDer.pickupRadius - gearDer.pickupRadius);
+      statRows.pickupRadius.innerHTML = fmt(base, gear, trans, ' px');
+    }
+
+    if (statRows.defense) {
+      const base = Math.round(baseDer.defense);
+      const gear = Math.round(gearDer.defense - baseDer.defense);
+      const trans = Math.round(totalDer.defense - gearDer.defense);
+      statRows.defense.innerHTML = fmt(base, gear, trans);
+    }
 
     // Cooldown Reduction (flat cooldown reduction shown as frames)
     if (statRows.cdr) {
@@ -1952,39 +2051,24 @@ export function makeOverlay(doc, player, onClose, opts = {}){
       statRows.hpRegen.textContent = `${totalRegenPerSec.toFixed(2)} /s`;
     }
 
-    // Bonus HP from items and skills
+    // Bonus HP breakdown
     if (statRows.bonusHp) {
-      const vitTotal = typeof player.getTotalStat === 'function' ? player.getTotalStat('vit') : (player.stats?.vit || 0);
-      const baseHp = PLAYER_BASE_HP + vitTotal * HP_PER_VIT;
-      let bonusHp = 0;
-      if (player.equip) {
-        Object.values(player.equip).forEach((it) => {
-          if (!it) return;
-          if (it.bonuses?.maxHp) bonusHp += it.bonuses.maxHp;
-          if (it.bonuses?.vit) bonusHp += it.bonuses.vit * HP_PER_VIT;
-        });
-      }
-      const fromSkills = 0; // placeholder if future skills add HP
-      bonusHp += fromSkills;
-      statRows.bonusHp.textContent = `${Math.round(bonusHp)} (of ${Math.round(baseHp + bonusHp)})`;
+      const base = Math.round(baseDer.bonusHp);
+      const gear = Math.round(gearDer.bonusHp - baseDer.bonusHp);
+      const trans = Math.round(totalDer.bonusHp - gearDer.bonusHp);
+      statRows.bonusHp.innerHTML = fmt(base, gear, trans, '');
     }
 
     // Current Skill Range: use nearest active skill; fallback to arrow/fireball average
     if (statRows.skillRange) {
-      const dex = typeof player.getTotalStat === 'function' ? player.getTotalStat('dex') : (player.stats?.dex || 0);
-      const rangeArrow = 240 + Math.min(40, dex) * 12; // matches computeProjectileLifeForDex baseRange
-      const rangeFire = 200 + Math.min(40, dex) * 12;
-      const avgRange = Math.round((rangeArrow + rangeFire) / 2);
-      statRows.skillRange.textContent = `${avgRange} px`;
+      const base = baseDer.skillRange;
+      const gear = gearDer.skillRange - baseDer.skillRange;
+      const trans = totalDer.skillRange - gearDer.skillRange;
+      statRows.skillRange.innerHTML = fmt(base, gear, trans, ' px');
     }
 
     // attributes
     if (!player.stats) player.stats = { str:0, agi:0, vit:0, int:0, dex:0, luck:0 };
-
-    const gearStats = typeof player.getGearStatBonuses === 'function'
-      ? player.getGearStatBonuses()
-      : { str:0, agi:0, vit:0, int:0, dex:0, luck:0 };
-    const transStats = player.transcendenceBonuses?.stats || {};
 
     ['str','agi','vit','int','dex','luck'].forEach((key) => {
       const ctrl = attrControls[key];

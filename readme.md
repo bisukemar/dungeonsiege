@@ -6,6 +6,8 @@ Latest Updates
 - Updated Transcendence EXP curve with fixed per-level bands (1500–6000 XP) up to Lv 99.
 - Added a mobile-only Reset button under Character in the HUD to quickly return to the title screen.
 - Fixed the arrow shot visual to use the correct sprite (arrow01.png).
+- Initial setup modal now requires starting stat/skill allocation (with admin bypass), and mobile top-bar uses a gear menu.
+- Inventory tab shows a badge for newly gained items; HP now rescales when max HP changes from gear.
 
 2 December 2025 Update
 - Added skill tiers (I/II/III) with per-tab sorting and tier labels on element tags.
